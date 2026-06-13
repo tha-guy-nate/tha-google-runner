@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tha-google-runner"
+version = "0.1.0"
+description = "A Tabular Helper API library that wraps Google Sheets with a typed, consistent interface built on gspread."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Nate Wright" }]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+keywords = ["google", "sheets", "gspread", "tabular", "helper"]
+dependencies = [
+    "gspread>=6.0",
+    "google-auth>=2.0",
+    "google-auth-oauthlib>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/tha-guy-nate/tha-google-runner"
+Issues = "https://github.com/tha-guy-nate/tha-google-runner/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tha_google_runner"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
