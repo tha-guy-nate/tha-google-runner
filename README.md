@@ -12,25 +12,15 @@ pip install tha-google-runner
 
 ## Authentication setup
 
-`tha-google-runner` uses your **personal Google account** — not a service account. There are two ways to authenticate. Option 1 is recommended if you have the Google Cloud SDK installed.
+`tha-google-runner` uses your **personal Google account** — not a service account. There are two ways to authenticate. Option 1 is recommended for most users since it works with private files and doesn't require any additional tooling.
 
 > **Cost note:** This package is free and open source. The Google APIs it uses are also free for normal scripting workloads — Google provides a generous free tier that the vast majority of users will never exceed. Google Cloud Console may ask for a credit card when you first create a project to verify your identity, but **Google does not charge you** for the APIs used here. Any billing questions are between you and Google — not this package.
 
-### Option 1 — Application Default Credentials (ADC)
+### Option 1 — OAuth2 client secrets (recommended)
 
-This is the zero-config path. Run once in your terminal:
+This is the standard path for accessing your own private Google files.
 
-```bash
-gcloud auth application-default login
-```
 
-A browser window opens, you sign in with your Google account, and credentials are saved to your machine. After that, any `Tha*` class works with no arguments.
-
-> Don't have `gcloud`? Install the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) — it's a standalone CLI tool, roughly similar in spirit to the AWS CLI or the Azure CLI. It is not heavy and not venv-specific; install it once at the system level and every Python project on your machine can use ADC. Or skip it entirely and use Option 2.
-
-### Option 2 — OAuth2 client secrets
-
-Use this if you don't have `gcloud` or prefer not to install it.
 
 **Step 1 — Create a Google Cloud project**
 
@@ -69,6 +59,16 @@ sheets = ThaSheets(credentials_file="client_secrets.json")
 ```
 
 > **Re-authentication note:** If you add `ThaGmail` to an existing setup, the Gmail scope was not included in your previous token. Run `tha-google-init` again (or pass `credentials_file=` on first use) to grant the new scope and refresh your cached token.
+
+### Option 2 — Application Default Credentials (ADC)
+
+Use this only if you're accessing **publicly shared** files or working in a Google Cloud environment (e.g., Cloud Run, Vertex AI). ADC via `gcloud` does not grant access to your personal private Drive/Sheets/Docs/Gmail.
+
+```bash
+gcloud auth application-default login
+```
+
+A browser window opens, credentials are saved to your machine, and any `Tha*` class works with no arguments. Requires the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install).
 
 ---
 
