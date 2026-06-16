@@ -68,7 +68,7 @@ class ThaDrive:
             }
             if page_token:
                 kwargs["pageToken"] = page_token
-            response = with_retry(lambda kw=kwargs: service.files().list(**kw).execute())
+            response = with_retry(lambda: service.files().list(**kwargs).execute())  # noqa: B023
             results.extend(response.get("files", []))
             page_token = response.get("nextPageToken")
             if not page_token:
