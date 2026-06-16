@@ -35,9 +35,7 @@ def make_mock_service(
     return service
 
 
-def make_sheets(
-    service: MagicMock, *, drive: MagicMock | None = None, **kwargs: Any
-) -> ThaSheets:
+def make_sheets(service: MagicMock, *, drive: MagicMock | None = None, **kwargs: Any) -> ThaSheets:
     sheets = ThaSheets(**kwargs)
     sheets._service = service
     if drive is not None:
@@ -231,9 +229,7 @@ def test_update_rows_clears_and_writes() -> None:
     sheets = make_sheets(service)
     rows = [{"x": 1, "y": 2}]
     count = sheets.update_rows(rows, spreadsheet_id="sheet-id", sheet_name="Sheet1")
-    _vals(service).clear.assert_called_once_with(
-        spreadsheetId="sheet-id", range="'Sheet1'"
-    )
+    _vals(service).clear.assert_called_once_with(spreadsheetId="sheet-id", range="'Sheet1'")
     _vals(service).update.assert_called_once_with(
         spreadsheetId="sheet-id",
         range="'Sheet1'!A1",
@@ -317,9 +313,7 @@ def test_clear_clears_sheet() -> None:
     sheets = make_sheets(service)
     sheets.rows = [{"a": "1"}]
     sheets.clear(spreadsheet_id="sheet-id", sheet_name="Sheet1")
-    _vals(service).clear.assert_called_once_with(
-        spreadsheetId="sheet-id", range="'Sheet1'"
-    )
+    _vals(service).clear.assert_called_once_with(spreadsheetId="sheet-id", range="'Sheet1'")
     assert sheets.rows == []
 
 

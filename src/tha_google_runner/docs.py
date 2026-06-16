@@ -62,16 +62,18 @@ class ThaDocs:
         doc = with_retry(lambda: service.documents().get(documentId=did).execute())
         end_index = doc["body"]["content"][-1]["endIndex"] - 1
         with_retry(
-            lambda: service.documents()
-            .batchUpdate(
-                documentId=did,
-                body={
-                    "requests": [
-                        {"insertText": {"location": {"index": end_index}, "text": text}}
-                    ]
-                },
+            lambda: (
+                service.documents()
+                .batchUpdate(
+                    documentId=did,
+                    body={
+                        "requests": [
+                            {"insertText": {"location": {"index": end_index}, "text": text}}
+                        ]
+                    },
+                )
+                .execute()
             )
-            .execute()
         )
 
     def insert_after(
@@ -92,16 +94,18 @@ class ThaDocs:
             raise GoogleError(f"String not found in document: {after!r}")
         insert_index = _map_char_to_index(runs, pos + len(after))
         with_retry(
-            lambda: service.documents()
-            .batchUpdate(
-                documentId=did,
-                body={
-                    "requests": [
-                        {"insertText": {"location": {"index": insert_index}, "text": text}}
-                    ]
-                },
+            lambda: (
+                service.documents()
+                .batchUpdate(
+                    documentId=did,
+                    body={
+                        "requests": [
+                            {"insertText": {"location": {"index": insert_index}, "text": text}}
+                        ]
+                    },
+                )
+                .execute()
             )
-            .execute()
         )
 
     def replace(
@@ -115,22 +119,24 @@ class ThaDocs:
     ) -> int:
         did = self._resolve_id(doc_id, url)
         result = with_retry(
-            lambda: self._get_service()
-            .documents()
-            .batchUpdate(
-                documentId=did,
-                body={
-                    "requests": [
-                        {
-                            "replaceAllText": {
-                                "containsText": {"text": old_text, "matchCase": match_case},
-                                "replaceText": new_text,
+            lambda: (
+                self._get_service()
+                .documents()
+                .batchUpdate(
+                    documentId=did,
+                    body={
+                        "requests": [
+                            {
+                                "replaceAllText": {
+                                    "containsText": {"text": old_text, "matchCase": match_case},
+                                    "replaceText": new_text,
+                                }
                             }
-                        }
-                    ]
-                },
+                        ]
+                    },
+                )
+                .execute()
             )
-            .execute()
         )
         replies = result.get("replies", [{}])
         return replies[0].get("replaceAllText", {}).get("occurrencesChanged", 0) if replies else 0

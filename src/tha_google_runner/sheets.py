@@ -70,10 +70,12 @@ class ThaSheets:
     def _meta(self, sid: str, fields: str = "*") -> dict[str, Any]:
         try:
             return with_retry(
-                lambda: self._get_service()
-                .spreadsheets()
-                .get(spreadsheetId=sid, fields=fields)
-                .execute()
+                lambda: (
+                    self._get_service()
+                    .spreadsheets()
+                    .get(spreadsheetId=sid, fields=fields)
+                    .execute()
+                )
             )
         except HttpError as exc:
             if exc.resp.status == 404:
@@ -94,15 +96,17 @@ class ThaSheets:
     ) -> list[list[Any]]:
         try:
             result = with_retry(
-                lambda: self._get_service()
-                .spreadsheets()
-                .values()
-                .get(
-                    spreadsheetId=sid,
-                    range=range_,
-                    valueRenderOption="UNFORMATTED_VALUE",
+                lambda: (
+                    self._get_service()
+                    .spreadsheets()
+                    .values()
+                    .get(
+                        spreadsheetId=sid,
+                        range=range_,
+                        valueRenderOption="UNFORMATTED_VALUE",
+                    )
+                    .execute()
                 )
-                .execute()
             )
             return result.get("values", [])
         except HttpError as exc:
@@ -112,40 +116,46 @@ class ThaSheets:
 
     def _set_values(self, sid: str, range_: str, values: list[list[Any]]) -> None:
         with_retry(
-            lambda: self._get_service()
-            .spreadsheets()
-            .values()
-            .update(
-                spreadsheetId=sid,
-                range=range_,
-                valueInputOption=_INPUT,
-                body={"values": values},
+            lambda: (
+                self._get_service()
+                .spreadsheets()
+                .values()
+                .update(
+                    spreadsheetId=sid,
+                    range=range_,
+                    valueInputOption=_INPUT,
+                    body={"values": values},
+                )
+                .execute()
             )
-            .execute()
         )
 
     def _append_values(self, sid: str, range_: str, values: list[list[Any]]) -> None:
         with_retry(
-            lambda: self._get_service()
-            .spreadsheets()
-            .values()
-            .append(
-                spreadsheetId=sid,
-                range=range_,
-                valueInputOption=_INPUT,
-                insertDataOption="INSERT_ROWS",
-                body={"values": values},
+            lambda: (
+                self._get_service()
+                .spreadsheets()
+                .values()
+                .append(
+                    spreadsheetId=sid,
+                    range=range_,
+                    valueInputOption=_INPUT,
+                    insertDataOption="INSERT_ROWS",
+                    body={"values": values},
+                )
+                .execute()
             )
-            .execute()
         )
 
     def _clear_values(self, sid: str, range_: str) -> None:
         with_retry(
-            lambda: self._get_service()
-            .spreadsheets()
-            .values()
-            .clear(spreadsheetId=sid, range=range_)
-            .execute()
+            lambda: (
+                self._get_service()
+                .spreadsheets()
+                .values()
+                .clear(spreadsheetId=sid, range=range_)
+                .execute()
+            )
         )
 
     def _normalize_rows(
@@ -254,9 +264,7 @@ class ThaSheets:
             "properties": {"title": title},
             "sheets": [{"properties": {"title": sheet_name}}],
         }
-        result = with_retry(
-            lambda: self._get_service().spreadsheets().create(body=body).execute()
-        )
+        result = with_retry(lambda: self._get_service().spreadsheets().create(body=body).execute())
         sid: str = result["spreadsheetId"]
         if rows:
             headers, dict_rows = self._normalize_rows(rows, [])
@@ -272,9 +280,7 @@ class ThaSheets:
         url: str | None = None,
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        with_retry(
-            lambda: self._get_drive_service().files().delete(fileId=sid).execute()
-        )
+        with_retry(lambda: self._get_drive_service().files().delete(fileId=sid).execute())
         self.rows = []
 
     def list_sheets(
@@ -297,24 +303,26 @@ class ThaSheets:
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
         with_retry(
-            lambda: self._get_service()
-            .spreadsheets()
-            .batchUpdate(
-                spreadsheetId=sid,
-                body={
-                    "requests": [
-                        {
-                            "addSheet": {
-                                "properties": {
-                                    "title": sheet_name,
-                                    "gridProperties": {"rowCount": 1000, "columnCount": 26},
+            lambda: (
+                self._get_service()
+                .spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=sid,
+                    body={
+                        "requests": [
+                            {
+                                "addSheet": {
+                                    "properties": {
+                                        "title": sheet_name,
+                                        "gridProperties": {"rowCount": 1000, "columnCount": 26},
+                                    }
                                 }
                             }
-                        }
-                    ]
-                },
+                        ]
+                    },
+                )
+                .execute()
             )
-            .execute()
         )
         if rows:
             headers, dict_rows = self._normalize_rows(rows, [])
@@ -339,13 +347,15 @@ class ThaSheets:
         if sheet_id is None:
             raise GoogleError(f"Sheet '{sheet_name}' not found in {sid}")
         with_retry(
-            lambda: self._get_service()
-            .spreadsheets()
-            .batchUpdate(
-                spreadsheetId=sid,
-                body={"requests": [{"deleteSheet": {"sheetId": sheet_id}}]},
+            lambda: (
+                self._get_service()
+                .spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=sid,
+                    body={"requests": [{"deleteSheet": {"sheetId": sheet_id}}]},
+                )
+                .execute()
             )
-            .execute()
         )
 
     def share(
@@ -358,14 +368,16 @@ class ThaSheets:
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
         with_retry(
-            lambda: self._get_drive_service()
-            .permissions()
-            .create(
-                fileId=sid,
-                body={"type": "user", "role": role, "emailAddress": email},
-                sendNotificationEmail=False,
+            lambda: (
+                self._get_drive_service()
+                .permissions()
+                .create(
+                    fileId=sid,
+                    body={"type": "user", "role": role, "emailAddress": email},
+                    sendNotificationEmail=False,
+                )
+                .execute()
             )
-            .execute()
         )
 
     def upsert_rows(
@@ -418,9 +430,7 @@ class ThaSheets:
 
         index: dict[tuple[str, ...], list[int]] = {}
         for i, row_vals in enumerate(data_rows):
-            row_key = tuple(
-                str(row_vals[c]) if c < len(row_vals) else "" for c in key_col_indices
-            )
+            row_key = tuple(str(row_vals[c]) if c < len(row_vals) else "" for c in key_col_indices)
             index.setdefault(row_key, []).append(i + 2)
 
         cell_updates: list[dict[str, Any]] = []
@@ -457,14 +467,16 @@ class ThaSheets:
 
         if cell_updates:
             with_retry(
-                lambda: self._get_service()
-                .spreadsheets()
-                .values()
-                .batchUpdate(
-                    spreadsheetId=sid,
-                    body={"valueInputOption": _INPUT, "data": cell_updates},
+                lambda: (
+                    self._get_service()
+                    .spreadsheets()
+                    .values()
+                    .batchUpdate(
+                        spreadsheetId=sid,
+                        body={"valueInputOption": _INPUT, "data": cell_updates},
+                    )
+                    .execute()
                 )
-                .execute()
             )
         if rows_to_append:
             self._append_values(sid, _rng(name), rows_to_append)
