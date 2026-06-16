@@ -279,9 +279,7 @@ class ThaSheets:
         # Build key → list of sheet row numbers (1-indexed, data starts at row 2)
         index: dict[tuple[str, ...], list[int]] = {}
         for i, row_vals in enumerate(data_rows):
-            row_key = tuple(
-                str(row_vals[c]) if c < len(row_vals) else "" for c in key_col_indices
-            )
+            row_key = tuple(str(row_vals[c]) if c < len(row_vals) else "" for c in key_col_indices)
             index.setdefault(row_key, []).append(i + 2)
 
         cell_updates: list[dict[str, Any]] = []

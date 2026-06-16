@@ -10,6 +10,7 @@ from tha_google_runner.sheets import ThaSheets
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_mock_client(
     records: list | None = None,
     row1: list | None = None,
@@ -40,6 +41,7 @@ def make_sheets(client: MagicMock, **kwargs: object) -> ThaSheets:
 # ---------------------------------------------------------------------------
 # _resolve_id
 # ---------------------------------------------------------------------------
+
 
 def test_resolve_id_accepts_raw_id() -> None:
     client, _, _ = make_mock_client(records=[])
@@ -73,6 +75,7 @@ def test_resolve_id_raises_when_neither_provided() -> None:
 # ---------------------------------------------------------------------------
 # read
 # ---------------------------------------------------------------------------
+
 
 def test_read_returns_records() -> None:
     client, _ws, _ = make_mock_client(records=[{"name": "Alice", "age": 30}])
@@ -122,6 +125,7 @@ def test_read_raises_on_missing_sheet_name() -> None:
 # append_rows
 # ---------------------------------------------------------------------------
 
+
 def test_append_rows_with_existing_headers() -> None:
     client, ws, _ = make_mock_client(row1=["name", "age"])
     sheets = make_sheets(client)
@@ -164,6 +168,7 @@ def test_append_rows_sets_self_rows() -> None:
 # update_rows
 # ---------------------------------------------------------------------------
 
+
 def test_update_rows_clears_and_writes() -> None:
     client, ws, _ = make_mock_client()
     sheets = make_sheets(client)
@@ -195,6 +200,7 @@ def test_update_rows_sets_self_rows() -> None:
 # ---------------------------------------------------------------------------
 # create
 # ---------------------------------------------------------------------------
+
 
 def test_create_returns_spreadsheet_id() -> None:
     client, _, _ = make_mock_client(spreadsheet_id="new-sheet-id")
@@ -230,6 +236,7 @@ def test_create_no_rows_does_not_write() -> None:
 # clear
 # ---------------------------------------------------------------------------
 
+
 def test_clear_calls_ws_clear() -> None:
     client, ws, _ = make_mock_client()
     sheets = make_sheets(client)
@@ -250,6 +257,7 @@ def test_clear_uses_named_sheet() -> None:
 # delete
 # ---------------------------------------------------------------------------
 
+
 def test_delete_calls_del_spreadsheet() -> None:
     client, _, _ = make_mock_client()
     sheets = make_sheets(client)
@@ -262,6 +270,7 @@ def test_delete_calls_del_spreadsheet() -> None:
 # ---------------------------------------------------------------------------
 # list_sheets
 # ---------------------------------------------------------------------------
+
 
 def test_list_sheets_returns_names() -> None:
     client, _, spreadsheet = make_mock_client()
@@ -285,6 +294,7 @@ def test_list_sheets_raises_on_missing_spreadsheet() -> None:
 # ---------------------------------------------------------------------------
 # add_sheet
 # ---------------------------------------------------------------------------
+
 
 def test_add_sheet_creates_worksheet() -> None:
     client, _, spreadsheet = make_mock_client()
@@ -311,6 +321,7 @@ def test_add_sheet_with_rows_writes_data() -> None:
 # delete_sheet
 # ---------------------------------------------------------------------------
 
+
 def test_delete_sheet_calls_del_worksheet() -> None:
     client, ws, spreadsheet = make_mock_client()
     sheets = make_sheets(client)
@@ -329,6 +340,7 @@ def test_delete_sheet_raises_on_missing_sheet() -> None:
 # ---------------------------------------------------------------------------
 # share
 # ---------------------------------------------------------------------------
+
 
 def test_share_defaults_to_reader() -> None:
     client, _, spreadsheet = make_mock_client()
@@ -386,10 +398,12 @@ def test_upsert_patches_matching_row() -> None:
     _ws_with_data(ws)
     sheets = make_sheets(client)
     sheets.upsert_rows([{"id": "1", "score": "100"}], key="id", spreadsheet_id="sheet-id")
-    ws.batch_update.assert_called_once_with([
-        {"range": "A2", "values": [["1"]]},
-        {"range": "C2", "values": [["100"]]},
-    ])
+    ws.batch_update.assert_called_once_with(
+        [
+            {"range": "A2", "values": [["1"]]},
+            {"range": "C2", "values": [["100"]]},
+        ]
+    )
     ws.append_rows.assert_not_called()
 
 
@@ -403,11 +417,13 @@ def test_upsert_composite_key_matches() -> None:
     rows = [{"region": "eu", "id": "1", "score": "99"}]
     sheets = make_sheets(client)
     sheets.upsert_rows(rows, key=["region", "id"], spreadsheet_id="sheet-id")
-    ws.batch_update.assert_called_once_with([
-        {"range": "A3", "values": [["eu"]]},
-        {"range": "B3", "values": [["1"]]},
-        {"range": "C3", "values": [["99"]]},
-    ])
+    ws.batch_update.assert_called_once_with(
+        [
+            {"range": "A3", "values": [["eu"]]},
+            {"range": "B3", "values": [["1"]]},
+            {"range": "C3", "values": [["99"]]},
+        ]
+    )
 
 
 def test_upsert_on_conflict_update_all() -> None:
@@ -488,9 +504,7 @@ def test_upsert_missing_key_column_raises() -> None:
     _ws_with_data(ws)
     sheets = make_sheets(client)
     with pytest.raises(GoogleError, match="Key column"):
-        sheets.upsert_rows(
-            [{"bad_key": "1"}], key="bad_key", spreadsheet_id="sheet-id"
-        )
+        sheets.upsert_rows([{"bad_key": "1"}], key="bad_key", spreadsheet_id="sheet-id")
 
 
 def test_upsert_empty_rows_is_no_op() -> None:
@@ -514,12 +528,11 @@ def test_upsert_sets_self_rows() -> None:
 # list[list] input — header auto-detection
 # ---------------------------------------------------------------------------
 
+
 def test_append_rows_list_input_matching_header_dropped() -> None:
     client, ws, _ = make_mock_client(row1=["name", "age"])
     sheets = make_sheets(client)
-    count = sheets.append_rows(
-        [["name", "age"], ["Alice", "30"]], spreadsheet_id="sheet-id"
-    )
+    count = sheets.append_rows([["name", "age"], ["Alice", "30"]], spreadsheet_id="sheet-id")
     ws.append_rows.assert_called_once_with([["Alice", "30"]])
     assert count == 1
 
@@ -527,9 +540,7 @@ def test_append_rows_list_input_matching_header_dropped() -> None:
 def test_append_rows_list_input_no_header_row() -> None:
     client, ws, _ = make_mock_client(row1=["name", "age"])
     sheets = make_sheets(client)
-    count = sheets.append_rows(
-        [["Alice", "30"], ["Bob", "25"]], spreadsheet_id="sheet-id"
-    )
+    count = sheets.append_rows([["Alice", "30"], ["Bob", "25"]], spreadsheet_id="sheet-id")
     ws.append_rows.assert_called_once_with([["Alice", "30"], ["Bob", "25"]])
     assert count == 2
 
@@ -567,9 +578,7 @@ def test_upsert_rows_list_input_no_header_row() -> None:
     client, ws, _ = make_mock_client()
     _ws_with_data(ws)
     sheets = make_sheets(client)
-    count = sheets.upsert_rows(
-        [["3", "Carol", "77"]], key="id", spreadsheet_id="sheet-id"
-    )
+    count = sheets.upsert_rows([["3", "Carol", "77"]], key="id", spreadsheet_id="sheet-id")
     ws.append_rows.assert_called_once_with([["3", "Carol", "77"]])
     assert count == 1
 
@@ -604,6 +613,7 @@ def test_create_list_input() -> None:
 # ---------------------------------------------------------------------------
 # client caching
 # ---------------------------------------------------------------------------
+
 
 def test_client_is_built_once() -> None:
     client, _, _ = make_mock_client(records=[])

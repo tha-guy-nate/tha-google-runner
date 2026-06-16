@@ -100,19 +100,24 @@ class ThaDocs:
         match_case: bool = True,
     ) -> int:
         did = self._resolve_id(doc_id, url)
-        result = self._get_service().documents().batchUpdate(
-            documentId=did,
-            body={
-                "requests": [
-                    {
-                        "replaceAllText": {
-                            "containsText": {"text": old_text, "matchCase": match_case},
-                            "replaceText": new_text,
+        result = (
+            self._get_service()
+            .documents()
+            .batchUpdate(
+                documentId=did,
+                body={
+                    "requests": [
+                        {
+                            "replaceAllText": {
+                                "containsText": {"text": old_text, "matchCase": match_case},
+                                "replaceText": new_text,
+                            }
                         }
-                    }
-                ]
-            },
-        ).execute()
+                    ]
+                },
+            )
+            .execute()
+        )
         replies = result.get("replies", [{}])
         return replies[0].get("replaceAllText", {}).get("occurrencesChanged", 0) if replies else 0
 
