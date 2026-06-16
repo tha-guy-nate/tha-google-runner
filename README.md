@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/tha-guy-nate/tha-google-runner/actions/workflows/ci.yml/badge.svg)](https://github.com/tha-guy-nate/tha-google-runner/actions/workflows/ci.yml)
 
-A Tabular Helper API library that wraps Google Sheets with a typed, consistent interface built on gspread.
+A Tabular Helper API library that wraps Google Sheets and Docs with a typed, consistent interface.
 
 ## Install
 
@@ -39,9 +39,10 @@ Use this if you don't have `gcloud` or prefer not to install it.
 
 **Step 2 — Enable the required APIs**
 
-In your new project, go to **APIs & Services** → **Enable APIs and Services** and enable both:
+In your new project, go to **APIs & Services** → **Enable APIs and Services** and enable:
 - **Google Sheets API**
 - **Google Drive API**
+- **Google Docs API** (only needed if you use `ThaDocs`)
 
 **Step 3 — Create OAuth2 credentials**
 
@@ -62,6 +63,8 @@ On the **first run**, a browser window opens for you to grant access. After that
 ---
 
 ## Quick start
+
+### ThaSheets
 
 ```python
 from tha_google_runner import ThaSheets
@@ -107,6 +110,31 @@ sheets.clear(spreadsheet_id="your-spreadsheet-id")
 > `https://docs.google.com/spreadsheets/d/<spreadsheet-id>/edit`
 >
 > You can also pass `url=` instead of `spreadsheet_id=` to any method and the ID will be extracted automatically.
+
+### ThaDocs
+
+```python
+from tha_google_runner import ThaDocs
+
+docs = ThaDocs()  # uses ADC; or pass credentials_file="client_secrets.json"
+
+# Read all text in a document
+text = docs.read(doc_id="your-document-id")
+
+# Append text to the end of a document
+docs.append("\nNew paragraph.", doc_id="your-document-id")
+
+# Insert text immediately after a specific string
+docs.insert_after("Appendix", after="See also:", doc_id="your-document-id")
+
+# Replace all occurrences of a string
+count = docs.replace(old_text="foo", new_text="bar", doc_id="your-document-id")
+```
+
+> **Finding your document ID:** It's the long string in the URL between `/d/` and `/edit`.
+> `https://docs.google.com/document/d/<document-id>/edit`
+>
+> You can also pass `url=` instead of `doc_id=` to any method.
 
 ---
 
@@ -287,6 +315,64 @@ Clear all data in a sheet. Resets `sheets.rows` to `[]`.
 ```python
 sheets.clear(spreadsheet_id="spreadsheet-id")
 sheets.clear(spreadsheet_id="spreadsheet-id", sheet_name="Archive")
+```
+
+---
+
+## ThaDocs API
+
+### `ThaDocs(*, credentials_file=None, token_file=None)`
+
+```python
+ThaDocs(
+    credentials_file: str | None = None,  # path to client_secrets.json; None uses ADC
+    token_file: str | None = None,         # override token cache path (OAuth2 only)
+)
+```
+
+The Google Docs client is built lazily on first use and cached for the lifetime of the instance.
+After a `read()`, `docs.content` is set to the full plain text of the document.
+
+---
+
+### `read(*, doc_id=None, url=None) -> str`
+
+Read the full plain text of a document. Sets `docs.content`.
+
+```python
+text = docs.read(doc_id="document-id")
+text = docs.read(url="https://docs.google.com/document/d/.../edit")
+```
+
+---
+
+### `append(text, *, doc_id=None, url=None) -> None`
+
+Append text to the end of a document.
+
+```python
+docs.append("\nNew section.", doc_id="document-id")
+```
+
+---
+
+### `insert_after(text, *, after, doc_id=None, url=None) -> None`
+
+Insert text immediately after the first occurrence of `after` in the document. Raises `GoogleError` if `after` is not found.
+
+```python
+docs.insert_after(" (updated)", after="Section 2", doc_id="document-id")
+```
+
+---
+
+### `replace(*, old_text, new_text, doc_id=None, url=None, match_case=True) -> int`
+
+Replace all occurrences of `old_text` with `new_text`. Returns the number of replacements made.
+
+```python
+count = docs.replace(old_text="draft", new_text="final", doc_id="document-id")
+count = docs.replace(old_text="Draft", new_text="Final", doc_id="document-id", match_case=False)
 ```
 
 ---
