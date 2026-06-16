@@ -7,7 +7,7 @@ import gspread
 import gspread.exceptions
 from gspread.utils import rowcol_to_a1
 
-from tha_google_runner.auth import build_client
+from tha_google_runner.auth import build_credentials
 from tha_google_runner.errors import GoogleError
 
 OnConflict = Literal["update_all", "update_first", "update_last", "raise", "skip"]
@@ -29,7 +29,8 @@ class ThaSheets:
 
     def _get_client(self) -> gspread.Client:
         if self._client is None:
-            self._client = build_client(self._credentials_file, self._token_file)
+            creds = build_credentials(self._credentials_file, self._token_file)
+            self._client = gspread.Client(auth=creds)
         return self._client
 
     def _resolve_id(self, spreadsheet_id: str | None, url: str | None) -> str:

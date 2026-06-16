@@ -1,26 +1,31 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import google.auth
 import google.auth.exceptions
-import gspread
 
 from tha_google_runner.errors import GoogleError
+
+if TYPE_CHECKING:
+    import google.auth.credentials
 
 _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/documents",
 ]
 
 _DEFAULT_TOKEN = Path.home() / ".config" / "tha-google-runner" / "token.json"
 
 
-def build_client(
+def build_credentials(
     credentials_file: str | None,
     token_file: str | None,
-) -> gspread.Client:
-    """Build a gspread client using ADC or an OAuth2 client_secrets.json file.
+) -> google.auth.credentials.Credentials:
+    """Return raw Google credentials using ADC or an OAuth2 client_secrets.json file.
 
     Auth priority:
     1. Application Default Credentials (ADC) — if credentials_file is None.
@@ -31,7 +36,7 @@ def build_client(
     if credentials_file is None:
         try:
             creds, _ = google.auth.default(scopes=_SCOPES)
-            return gspread.Client(auth=creds)
+            return creds
         except google.auth.exceptions.DefaultCredentialsError:
             raise GoogleError(
                 "No Google credentials found. Either:\n"
@@ -40,9 +45,23 @@ def build_client(
                 "See the tha-google-runner README for setup instructions."
             ) from None
 
-    token = token_file or str(_DEFAULT_TOKEN)
-    Path(token).parent.mkdir(parents=True, exist_ok=True)
-    return gspread.oauth(
-        credentials_filename=credentials_file,
-        authorized_user_filename=token,
-    )
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+
+    token = Path(token_file or str(_DEFAULT_TOKEN))
+    token.parent.mkdir(parents=True, exist_ok=True)
+
+    creds: Credentials | None = None
+    if token.exists():
+        creds = Credentials.from_authorized_user_info(json.loads(token.read_text()), _SCOPES)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(str(credentials_file), _SCOPES)
+            creds = flow.run_local_server(port=0)
+        token.write_text(creds.to_json())
+
+    return creds
