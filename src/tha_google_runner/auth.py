@@ -35,8 +35,8 @@ def build_credentials(
     """
     if credentials_file is None:
         try:
-            creds, _ = google.auth.default(scopes=_SCOPES)
-            return creds
+            adc_creds, _ = google.auth.default(scopes=_SCOPES)
+            return adc_creds
         except google.auth.exceptions.DefaultCredentialsError:
             raise GoogleError(
                 "No Google credentials found. Either:\n"
