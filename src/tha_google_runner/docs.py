@@ -85,7 +85,9 @@ class ThaDocs:
         insert_index = _map_char_to_index(runs, pos + len(after))
         service.documents().batchUpdate(
             documentId=did,
-            body={"requests": [{"insertText": {"location": {"index": insert_index}, "text": text}}]},
+            body={
+                "requests": [{"insertText": {"location": {"index": insert_index}, "text": text}}]
+            },
         ).execute()
 
     def replace(
