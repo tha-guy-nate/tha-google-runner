@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/tha-guy-nate/tha-google-runner/actions/workflows/ci.yml/badge.svg)](https://github.com/tha-guy-nate/tha-google-runner/actions/workflows/ci.yml)
 
-A Tabular Helper API library that wraps Google Sheets and Docs with a typed, consistent interface.
+A Tabular Helper API library that wraps Google Sheets, Docs, Drive, Slides, and Gmail with a typed, consistent interface.
 
 ## Install
 
@@ -14,7 +14,7 @@ pip install tha-google-runner
 
 `tha-google-runner` uses your **personal Google account** — not a service account. There are two ways to authenticate. Option 1 is recommended if you have the Google Cloud SDK installed.
 
-> **Cost note:** This package is free and open source. The Google APIs it uses (Google Sheets API, Google Drive API) are also free for normal scripting workloads — Google provides a generous free tier (300 reads/min, 60 writes/min) that the vast majority of users will never exceed. Google Cloud Console may ask for a credit card when you first create a project to verify your identity, but **Google does not charge you** for the APIs used here. Any billing questions are between you and Google — not this package.
+> **Cost note:** This package is free and open source. The Google APIs it uses are also free for normal scripting workloads — Google provides a generous free tier that the vast majority of users will never exceed. Google Cloud Console may ask for a credit card when you first create a project to verify your identity, but **Google does not charge you** for the APIs used here. Any billing questions are between you and Google — not this package.
 
 ### Option 1 — Application Default Credentials (ADC)
 
@@ -24,7 +24,7 @@ This is the zero-config path. Run once in your terminal:
 gcloud auth application-default login
 ```
 
-A browser window opens, you sign in with your Google account, and credentials are saved to your machine. After that, `ThaSheets()` works with no arguments.
+A browser window opens, you sign in with your Google account, and credentials are saved to your machine. After that, any `Tha*` class works with no arguments.
 
 > Don't have `gcloud`? Install the [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) — it's a standalone CLI tool, roughly similar in spirit to the AWS CLI or the Azure CLI. It is not heavy and not venv-specific; install it once at the system level and every Python project on your machine can use ADC. Or skip it entirely and use Option 2.
 
@@ -43,6 +43,8 @@ In your new project, go to **APIs & Services** → **Enable APIs and Services** 
 - **Google Sheets API**
 - **Google Drive API**
 - **Google Docs API** (only needed if you use `ThaDocs`)
+- **Google Slides API** (only needed if you use `ThaSlides`)
+- **Gmail API** (only needed if you use `ThaGmail`)
 
 **Step 3 — Create OAuth2 credentials**
 
@@ -52,13 +54,21 @@ In your new project, go to **APIs & Services** → **Enable APIs and Services** 
 3. Application type: **Desktop app** → give it a name → **Create**
 4. Click **Download JSON** and save the file (e.g., `client_secrets.json`)
 
-**Step 4 — Use the credentials file**
+**Step 4 — Run the auth setup CLI**
+
+```bash
+tha-google-init --credentials client_secrets.json
+```
+
+This opens a browser window for you to grant access. After that, the token is cached at `~/.config/tha-google-runner/token.json` and no browser is needed on subsequent runs.
+
+You can also pass the credentials file directly at runtime:
 
 ```python
 sheets = ThaSheets(credentials_file="client_secrets.json")
 ```
 
-On the **first run**, a browser window opens for you to grant access. After that, the token is cached at `~/.config/tha-google-runner/token.json` and no browser is needed.
+> **Re-authentication note:** If you add `ThaGmail` to an existing setup, the Gmail scope was not included in your previous token. Run `tha-google-init` again (or pass `credentials_file=` on first use) to grant the new scope and refresh your cached token.
 
 ---
 
@@ -135,6 +145,109 @@ count = docs.replace(old_text="foo", new_text="bar", doc_id="your-document-id")
 > `https://docs.google.com/document/d/<document-id>/edit`
 >
 > You can also pass `url=` instead of `doc_id=` to any method.
+
+### ThaDrive
+
+```python
+from tha_google_runner import ThaDrive
+
+drive = ThaDrive()  # uses ADC; or pass credentials_file="client_secrets.json"
+
+# List all non-trashed files
+files = drive.list_files()
+
+# List files in a specific folder
+files = drive.list_files(folder_id="folder-id")
+
+# Search by name (contains by default)
+results = drive.search("Q1 Report")
+
+# Search by exact name
+results = drive.search("Q1 Report.pdf", exact=True)
+
+# Get file metadata
+meta = drive.get(file_id="file-id")
+
+# Export a Google Workspace file (Docs, Sheets, Slides) to a local format
+pdf_bytes = drive.export(file_id="file-id", mime_type="application/pdf")
+
+# Download a regular uploaded file (PDFs, images, etc.)
+content = drive.download(file_id="file-id")
+with open("output.pdf", "wb") as f:
+    f.write(content)
+```
+
+> You can pass `url=` instead of `file_id=` to any method.
+
+### ThaSlides
+
+```python
+from tha_google_runner import ThaSlides
+
+slides = ThaSlides()  # uses ADC; or pass credentials_file="client_secrets.json"
+
+# Read all slides — returns a list of dicts, one per slide
+deck = slides.read(presentation_id="your-presentation-id")
+for slide in deck:
+    print(slide["index"], slide["title"], slide["body"], slide["notes"])
+
+# Get the raw API response
+raw = slides.get(presentation_id="your-presentation-id")
+```
+
+Each dict in the returned list has:
+
+| Key | Type | Description |
+|---|---|---|
+| `index` | `int` | 0-based slide position |
+| `object_id` | `str` | Google's internal slide ID |
+| `title` | `str` | Title placeholder text (empty string if none) |
+| `body` | `str` | Body/subtitle placeholder text (empty string if none) |
+| `notes` | `str` | Speaker notes text (empty string if none) |
+
+> You can also pass `url=` instead of `presentation_id=`.
+
+### ThaGmail
+
+```python
+from tha_google_runner import ThaGmail
+
+gmail = ThaGmail()  # uses ADC; or pass credentials_file="client_secrets.json"
+
+# Send a plain-text email
+gmail.send(to="recipient@example.com", subject="Hello", body="Hi there!")
+
+# Send to multiple recipients with CC and BCC
+gmail.send(
+    to=["alice@example.com", "bob@example.com"],
+    subject="Report",
+    body="<h1>Done</h1>",
+    cc="manager@example.com",
+    html=True,
+)
+
+# List messages (returns up to 100 by default)
+messages = gmail.list_messages()
+
+# Filter with a Gmail query string
+messages = gmail.list_messages(query="from:boss@example.com is:unread", max_results=20)
+
+# Read a message by ID
+msg = gmail.read(message_id=messages[0]["id"])
+print(msg["subject"], msg["from_"], msg["body"])
+```
+
+Each dict returned by `read()` has:
+
+| Key | Type | Description |
+|---|---|---|
+| `id` | `str` | Message ID |
+| `thread_id` | `str` | Thread ID |
+| `subject` | `str` | Subject header |
+| `from_` | `str` | From header |
+| `to` | `str` | To header |
+| `date` | `str` | Date header |
+| `body` | `str` | Plain-text body (falls back to HTML if no plain-text part) |
 
 ---
 
@@ -374,6 +487,172 @@ Replace all occurrences of `old_text` with `new_text`. Returns the number of rep
 count = docs.replace(old_text="draft", new_text="final", doc_id="document-id")
 count = docs.replace(old_text="Draft", new_text="Final", doc_id="document-id", match_case=False)
 ```
+
+---
+
+## ThaDrive API
+
+### `ThaDrive(*, credentials_file=None, token_file=None)`
+
+```python
+ThaDrive(
+    credentials_file: str | None = None,
+    token_file: str | None = None,
+)
+```
+
+---
+
+### `list_files(*, folder_id=None, query=None) -> list[dict]`
+
+List all non-trashed files. Optionally filter by folder or provide a raw Drive query string.
+
+```python
+files = drive.list_files()
+files = drive.list_files(folder_id="folder-id")
+files = drive.list_files(query="mimeType = 'application/pdf'")
+```
+
+---
+
+### `search(name, *, exact=False) -> list[dict]`
+
+Search files by name. Uses `contains` by default; pass `exact=True` for an exact match.
+
+```python
+results = drive.search("Q1 Report")
+results = drive.search("Q1 Report.pdf", exact=True)
+```
+
+---
+
+### `get(*, file_id=None, url=None) -> dict`
+
+Get metadata for a single file.
+
+```python
+meta = drive.get(file_id="file-id")
+```
+
+---
+
+### `export(*, file_id=None, url=None, mime_type="application/pdf") -> bytes`
+
+Export a Google Workspace file (Docs, Sheets, Slides) to a different format. Returns the file content as bytes.
+
+```python
+pdf = drive.export(file_id="file-id", mime_type="application/pdf")
+xlsx = drive.export(file_id="file-id", mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+```
+
+> Use `export` for Google Workspace files. Use `download` for regular uploaded files (PDFs, images, etc.).
+
+---
+
+### `download(*, file_id=None, url=None) -> bytes`
+
+Download a regular (non-Google Workspace) file stored in Drive. Returns the file content as bytes.
+
+```python
+content = drive.download(file_id="file-id")
+with open("report.pdf", "wb") as f:
+    f.write(content)
+```
+
+---
+
+## ThaSlides API
+
+### `ThaSlides(*, credentials_file=None, token_file=None)`
+
+```python
+ThaSlides(
+    credentials_file: str | None = None,
+    token_file: str | None = None,
+)
+```
+
+---
+
+### `read(*, presentation_id=None, url=None) -> list[dict]`
+
+Read all slides. Returns one dict per slide with `index`, `object_id`, `title`, `body`, and `notes`.
+
+```python
+deck = slides.read(presentation_id="presentation-id")
+for slide in deck:
+    print(f"Slide {slide['index']}: {slide['title']}")
+    print(slide['body'])
+    print(slide['notes'])
+```
+
+---
+
+### `get(*, presentation_id=None, url=None) -> dict`
+
+Return the raw API response for the presentation.
+
+```python
+raw = slides.get(presentation_id="presentation-id")
+```
+
+---
+
+## ThaGmail API
+
+### `ThaGmail(*, credentials_file=None, token_file=None)`
+
+```python
+ThaGmail(
+    credentials_file: str | None = None,
+    token_file: str | None = None,
+)
+```
+
+---
+
+### `send(*, to, subject, body, cc=None, bcc=None, html=False) -> dict`
+
+Send an email. `to`, `cc`, and `bcc` each accept a string or a list of strings.
+
+```python
+gmail.send(to="recipient@example.com", subject="Hello", body="Hi there!")
+gmail.send(
+    to=["alice@example.com", "bob@example.com"],
+    subject="Report",
+    body="<h1>Done</h1>",
+    cc="manager@example.com",
+    html=True,
+)
+```
+
+Returns the sent message metadata dict from the API.
+
+---
+
+### `list_messages(*, query=None, max_results=100) -> list[dict]`
+
+List messages. Accepts any Gmail query string. Returns up to `max_results` messages (capped at 500).
+
+```python
+messages = gmail.list_messages()
+messages = gmail.list_messages(query="from:boss@example.com is:unread", max_results=20)
+```
+
+Each dict has `id` and `threadId`.
+
+---
+
+### `read(*, message_id) -> dict`
+
+Fetch and parse a message by ID.
+
+```python
+msg = gmail.read(message_id="message-id")
+print(msg["subject"], msg["from_"], msg["body"])
+```
+
+Returns a dict with `id`, `thread_id`, `subject`, `from_`, `to`, `date`, and `body`.
 
 ---
 
