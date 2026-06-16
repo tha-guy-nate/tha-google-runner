@@ -217,7 +217,7 @@ class ThaSheets:
         headers, dict_rows = self._normalize_rows(rows, existing_headers)
         values = [[row.get(h, "") for h in headers] for row in dict_rows]
         if not existing_headers:
-            self._set_values(sid, _rng(name, "A1"), [headers] + values)
+            self._set_values(sid, _rng(name, "A1"), [headers, *values])
         else:
             self._append_values(sid, _rng(name), values)
         self.rows = dict_rows
@@ -238,7 +238,7 @@ class ThaSheets:
             self.rows = []
             return 0
         headers, dict_rows = self._normalize_rows(rows, [])
-        values = [headers] + [[row.get(h, "") for h in headers] for row in dict_rows]
+        values = [headers, *[[row.get(h, "") for h in headers] for row in dict_rows]]
         self._set_values(sid, _rng(name, "A1"), values)
         self.rows = dict_rows
         return len(dict_rows)
@@ -260,7 +260,7 @@ class ThaSheets:
         sid: str = result["spreadsheetId"]
         if rows:
             headers, dict_rows = self._normalize_rows(rows, [])
-            values = [headers] + [[row.get(h, "") for h in headers] for row in dict_rows]
+            values = [headers, *[[row.get(h, "") for h in headers] for row in dict_rows]]
             self._set_values(sid, _rng(sheet_name, "A1"), values)
             self.rows = dict_rows
         return sid
@@ -318,7 +318,7 @@ class ThaSheets:
         )
         if rows:
             headers, dict_rows = self._normalize_rows(rows, [])
-            values = [headers] + [[row.get(h, "") for h in headers] for row in dict_rows]
+            values = [headers, *[[row.get(h, "") for h in headers] for row in dict_rows]]
             self._set_values(sid, _rng(sheet_name, "A1"), values)
             self.rows = dict_rows
 

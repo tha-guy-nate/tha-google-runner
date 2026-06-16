@@ -65,7 +65,11 @@ class ThaDocs:
             lambda: service.documents()
             .batchUpdate(
                 documentId=did,
-                body={"requests": [{"insertText": {"location": {"index": end_index}, "text": text}}]},
+                body={
+                    "requests": [
+                        {"insertText": {"location": {"index": end_index}, "text": text}}
+                    ]
+                },
             )
             .execute()
         )
@@ -91,7 +95,11 @@ class ThaDocs:
             lambda: service.documents()
             .batchUpdate(
                 documentId=did,
-                body={"requests": [{"insertText": {"location": {"index": insert_index}, "text": text}}]},
+                body={
+                    "requests": [
+                        {"insertText": {"location": {"index": insert_index}, "text": text}}
+                    ]
+                },
             )
             .execute()
         )

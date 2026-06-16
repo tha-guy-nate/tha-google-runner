@@ -68,7 +68,7 @@ class ThaDrive:
             }
             if page_token:
                 kwargs["pageToken"] = page_token
-            response = with_retry(lambda: service.files().list(**kwargs).execute())
+            response = with_retry(lambda kw=kwargs: service.files().list(**kw).execute())
             results.extend(response.get("files", []))
             page_token = response.get("nextPageToken")
             if not page_token:
@@ -94,7 +94,9 @@ class ThaDrive:
         fields: str = "*",
     ) -> dict[str, Any]:
         fid = self._resolve_id(file_id, url)
-        return with_retry(lambda: self._get_service().files().get(fileId=fid, fields=fields).execute())  # type: ignore[no-any-return]
+        return with_retry(  # type: ignore[no-any-return]
+            lambda: self._get_service().files().get(fileId=fid, fields=fields).execute()
+        )
 
     def export(
         self,
