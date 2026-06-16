@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from tha_google_runner.auth import build_credentials
-from tha_google_runner.errors import GoogleError
+from tha_google_runner.errors import GoogleError, with_retry
 
 _URL_RE = re.compile(r"/document/d/([a-zA-Z0-9_-]+)")
 
@@ -46,7 +46,7 @@ class ThaDocs:
         url: str | None = None,
     ) -> str:
         did = self._resolve_id(doc_id, url)
-        doc = self._get_service().documents().get(documentId=did).execute()
+        doc = with_retry(lambda: self._get_service().documents().get(documentId=did).execute())
         self.content = _extract_text(doc)
         return self.content
 
@@ -59,12 +59,16 @@ class ThaDocs:
     ) -> None:
         did = self._resolve_id(doc_id, url)
         service = self._get_service()
-        doc = service.documents().get(documentId=did).execute()
+        doc = with_retry(lambda: service.documents().get(documentId=did).execute())
         end_index = doc["body"]["content"][-1]["endIndex"] - 1
-        service.documents().batchUpdate(
-            documentId=did,
-            body={"requests": [{"insertText": {"location": {"index": end_index}, "text": text}}]},
-        ).execute()
+        with_retry(
+            lambda: service.documents()
+            .batchUpdate(
+                documentId=did,
+                body={"requests": [{"insertText": {"location": {"index": end_index}, "text": text}}]},
+            )
+            .execute()
+        )
 
     def insert_after(
         self,
@@ -76,19 +80,21 @@ class ThaDocs:
     ) -> None:
         did = self._resolve_id(doc_id, url)
         service = self._get_service()
-        doc = service.documents().get(documentId=did).execute()
+        doc = with_retry(lambda: service.documents().get(documentId=did).execute())
         runs = _text_runs(doc)
         plain = "".join(t for _, t in runs)
         pos = plain.find(after)
         if pos == -1:
             raise GoogleError(f"String not found in document: {after!r}")
         insert_index = _map_char_to_index(runs, pos + len(after))
-        service.documents().batchUpdate(
-            documentId=did,
-            body={
-                "requests": [{"insertText": {"location": {"index": insert_index}, "text": text}}]
-            },
-        ).execute()
+        with_retry(
+            lambda: service.documents()
+            .batchUpdate(
+                documentId=did,
+                body={"requests": [{"insertText": {"location": {"index": insert_index}, "text": text}}]},
+            )
+            .execute()
+        )
 
     def replace(
         self,
@@ -100,8 +106,8 @@ class ThaDocs:
         match_case: bool = True,
     ) -> int:
         did = self._resolve_id(doc_id, url)
-        result = (
-            self._get_service()
+        result = with_retry(
+            lambda: self._get_service()
             .documents()
             .batchUpdate(
                 documentId=did,

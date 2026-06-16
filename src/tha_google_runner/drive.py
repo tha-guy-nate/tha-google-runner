@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from tha_google_runner.auth import build_credentials
-from tha_google_runner.errors import GoogleError
+from tha_google_runner.errors import GoogleError, with_retry
 
 _ID_RE = re.compile(r"/d/([a-zA-Z0-9_-]+)|[?&]id=([a-zA-Z0-9_-]+)")
 
@@ -68,7 +68,7 @@ class ThaDrive:
             }
             if page_token:
                 kwargs["pageToken"] = page_token
-            response = service.files().list(**kwargs).execute()
+            response = with_retry(lambda: service.files().list(**kwargs).execute())
             results.extend(response.get("files", []))
             page_token = response.get("nextPageToken")
             if not page_token:
@@ -94,7 +94,7 @@ class ThaDrive:
         fields: str = "*",
     ) -> dict[str, Any]:
         fid = self._resolve_id(file_id, url)
-        return self._get_service().files().get(fileId=fid, fields=fields).execute()  # type: ignore[no-any-return]
+        return with_retry(lambda: self._get_service().files().get(fileId=fid, fields=fields).execute())  # type: ignore[no-any-return]
 
     def export(
         self,
@@ -113,7 +113,7 @@ class ThaDrive:
         downloader = MediaIoBaseDownload(buf, request)
         done = False
         while not done:
-            _, done = downloader.next_chunk()
+            _, done = with_retry(downloader.next_chunk)
         return buf.getvalue()
 
     def download(
@@ -132,5 +132,5 @@ class ThaDrive:
         downloader = MediaIoBaseDownload(buf, request)
         done = False
         while not done:
-            _, done = downloader.next_chunk()
+            _, done = with_retry(downloader.next_chunk)
         return buf.getvalue()

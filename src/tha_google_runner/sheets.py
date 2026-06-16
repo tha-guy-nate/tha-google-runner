@@ -3,16 +3,29 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, cast
 
-import gspread
-import gspread.exceptions
-from gspread.utils import rowcol_to_a1
+from googleapiclient.errors import HttpError
 
 from tha_google_runner.auth import build_credentials
-from tha_google_runner.errors import GoogleError
+from tha_google_runner.errors import GoogleError, with_retry
 
 OnConflict = Literal["update_all", "update_first", "update_last", "raise", "skip"]
 
 _URL_RE = re.compile(r"/spreadsheets/d/([a-zA-Z0-9_-]+)")
+_INPUT = "USER_ENTERED"
+
+
+def _a1(row: int, col: int) -> str:
+    col_str = ""
+    c = col
+    while c > 0:
+        c, rem = divmod(c - 1, 26)
+        col_str = chr(65 + rem) + col_str
+    return f"{col_str}{row}"
+
+
+def _rng(name: str, a1: str = "") -> str:
+    safe = name.replace("'", "\\'")
+    return f"'{safe}'!{a1}" if a1 else f"'{safe}'"
 
 
 class ThaSheets:
@@ -24,14 +37,25 @@ class ThaSheets:
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
-        self._client: gspread.Client | None = None
+        self._service: Any = None
+        self._drive_service: Any = None
         self.rows: list[dict[str, Any]] = []
 
-    def _get_client(self) -> gspread.Client:
-        if self._client is None:
+    def _get_service(self) -> Any:
+        if self._service is None:
+            from googleapiclient.discovery import build
+
             creds = build_credentials(self._credentials_file, self._token_file)
-            self._client = gspread.Client(auth=creds)
-        return self._client
+            self._service = build("sheets", "v4", credentials=creds)
+        return self._service
+
+    def _get_drive_service(self) -> Any:
+        if self._drive_service is None:
+            from googleapiclient.discovery import build
+
+            creds = build_credentials(self._credentials_file, self._token_file)
+            self._drive_service = build("drive", "v3", credentials=creds)
+        return self._drive_service
 
     def _resolve_id(self, spreadsheet_id: str | None, url: str | None) -> str:
         if url is not None:
@@ -43,21 +67,86 @@ class ThaSheets:
             return spreadsheet_id
         raise GoogleError("Provide either spreadsheet_id= or url=")
 
-    def _get_spreadsheet(self, sid: str) -> gspread.Spreadsheet:
-        client = self._get_client()
+    def _meta(self, sid: str, fields: str = "*") -> dict[str, Any]:
         try:
-            return client.open_by_key(sid)
-        except gspread.exceptions.SpreadsheetNotFound:
-            raise GoogleError(f"Spreadsheet not found: {sid}") from None
+            return with_retry(
+                lambda: self._get_service()
+                .spreadsheets()
+                .get(spreadsheetId=sid, fields=fields)
+                .execute()
+            )
+        except HttpError as exc:
+            if exc.resp.status == 404:
+                raise GoogleError(f"Spreadsheet not found: {sid}") from None
+            raise
 
-    def _get_worksheet(self, sid: str, sheet_name: str | None) -> gspread.Worksheet:
-        spreadsheet = self._get_spreadsheet(sid)
-        if sheet_name is None:
-            return spreadsheet.sheet1
+    def _resolve_sheet(self, sid: str, sheet_name: str | None) -> str:
+        if sheet_name is not None:
+            return sheet_name
+        result = self._meta(sid, fields="sheets.properties.title")
+        sheets = result.get("sheets", [])
+        if not sheets:
+            raise GoogleError(f"Spreadsheet {sid} has no sheets")
+        return sheets[0]["properties"]["title"]
+
+    def _get_values(
+        self, sid: str, range_: str, *, sheet_name: str | None = None
+    ) -> list[list[Any]]:
         try:
-            return spreadsheet.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
-            raise GoogleError(f"Sheet '{sheet_name}' not found in {sid}") from None
+            result = with_retry(
+                lambda: self._get_service()
+                .spreadsheets()
+                .values()
+                .get(
+                    spreadsheetId=sid,
+                    range=range_,
+                    valueRenderOption="UNFORMATTED_VALUE",
+                )
+                .execute()
+            )
+            return result.get("values", [])
+        except HttpError as exc:
+            if exc.resp.status in (400, 404) and sheet_name is not None:
+                raise GoogleError(f"Sheet '{sheet_name}' not found in {sid}") from None
+            raise
+
+    def _set_values(self, sid: str, range_: str, values: list[list[Any]]) -> None:
+        with_retry(
+            lambda: self._get_service()
+            .spreadsheets()
+            .values()
+            .update(
+                spreadsheetId=sid,
+                range=range_,
+                valueInputOption=_INPUT,
+                body={"values": values},
+            )
+            .execute()
+        )
+
+    def _append_values(self, sid: str, range_: str, values: list[list[Any]]) -> None:
+        with_retry(
+            lambda: self._get_service()
+            .spreadsheets()
+            .values()
+            .append(
+                spreadsheetId=sid,
+                range=range_,
+                valueInputOption=_INPUT,
+                insertDataOption="INSERT_ROWS",
+                body={"values": values},
+            )
+            .execute()
+        )
+
+    def _clear_values(self, sid: str, range_: str) -> None:
+        with_retry(
+            lambda: self._get_service()
+            .spreadsheets()
+            .values()
+            .clear(spreadsheetId=sid, range=range_)
+            .execute()
+        )
 
     def _normalize_rows(
         self,
@@ -99,8 +188,16 @@ class ThaSheets:
         sheet_name: str | None = None,
     ) -> list[dict[str, Any]]:
         sid = self._resolve_id(spreadsheet_id, url)
-        ws = self._get_worksheet(sid, sheet_name)
-        self.rows = ws.get_all_records()
+        name = self._resolve_sheet(sid, sheet_name)
+        raw = self._get_values(sid, _rng(name), sheet_name=name)
+        if not raw:
+            self.rows = []
+            return self.rows
+        headers = [str(h) for h in raw[0]]
+        self.rows = [
+            dict(zip(headers, row + [""] * (len(headers) - len(row)), strict=False))
+            for row in raw[1:]
+        ]
         return self.rows
 
     def append_rows(
@@ -114,13 +211,15 @@ class ThaSheets:
         if not rows:
             return 0
         sid = self._resolve_id(spreadsheet_id, url)
-        ws = self._get_worksheet(sid, sheet_name)
-        existing_headers = ws.row_values(1)
+        name = self._resolve_sheet(sid, sheet_name)
+        header_raw = self._get_values(sid, _rng(name, "1:1"), sheet_name=name)
+        existing_headers = [str(h) for h in header_raw[0]] if header_raw else []
         headers, dict_rows = self._normalize_rows(rows, existing_headers)
-        if not existing_headers:
-            ws.append_row(headers)
         values = [[row.get(h, "") for h in headers] for row in dict_rows]
-        ws.append_rows(values)
+        if not existing_headers:
+            self._set_values(sid, _rng(name, "A1"), [headers] + values)
+        else:
+            self._append_values(sid, _rng(name), values)
         self.rows = dict_rows
         return len(dict_rows)
 
@@ -133,14 +232,14 @@ class ThaSheets:
         sheet_name: str | None = None,
     ) -> int:
         sid = self._resolve_id(spreadsheet_id, url)
-        ws = self._get_worksheet(sid, sheet_name)
-        ws.clear()
+        name = self._resolve_sheet(sid, sheet_name)
+        self._clear_values(sid, _rng(name))
         if not rows:
             self.rows = []
             return 0
         headers, dict_rows = self._normalize_rows(rows, [])
         values = [headers] + [[row.get(h, "") for h in headers] for row in dict_rows]
-        ws.update("A1", values)  # type: ignore[arg-type]
+        self._set_values(sid, _rng(name, "A1"), values)
         self.rows = dict_rows
         return len(dict_rows)
 
@@ -151,16 +250,20 @@ class ThaSheets:
         rows: list[dict[str, Any]] | list[list[Any]] | None = None,
         sheet_name: str = "Sheet1",
     ) -> str:
-        client = self._get_client()
-        spreadsheet = client.create(title)
-        ws = spreadsheet.sheet1
-        ws.update_title(sheet_name)
+        body: dict[str, Any] = {
+            "properties": {"title": title},
+            "sheets": [{"properties": {"title": sheet_name}}],
+        }
+        result = with_retry(
+            lambda: self._get_service().spreadsheets().create(body=body).execute()
+        )
+        sid: str = result["spreadsheetId"]
         if rows:
             headers, dict_rows = self._normalize_rows(rows, [])
             values = [headers] + [[row.get(h, "") for h in headers] for row in dict_rows]
-            ws.update("A1", values)  # type: ignore[arg-type]
+            self._set_values(sid, _rng(sheet_name, "A1"), values)
             self.rows = dict_rows
-        return spreadsheet.id
+        return sid
 
     def delete(
         self,
@@ -169,7 +272,9 @@ class ThaSheets:
         url: str | None = None,
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        self._get_client().del_spreadsheet(sid)
+        with_retry(
+            lambda: self._get_drive_service().files().delete(fileId=sid).execute()
+        )
         self.rows = []
 
     def list_sheets(
@@ -179,8 +284,8 @@ class ThaSheets:
         url: str | None = None,
     ) -> list[str]:
         sid = self._resolve_id(spreadsheet_id, url)
-        spreadsheet = self._get_spreadsheet(sid)
-        return [ws.title for ws in spreadsheet.worksheets()]
+        result = self._meta(sid, fields="sheets.properties.title")
+        return [s["properties"]["title"] for s in result.get("sheets", [])]
 
     def add_sheet(
         self,
@@ -191,12 +296,30 @@ class ThaSheets:
         rows: list[dict[str, Any]] | list[list[Any]] | None = None,
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        spreadsheet = self._get_spreadsheet(sid)
-        ws = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=26)
+        with_retry(
+            lambda: self._get_service()
+            .spreadsheets()
+            .batchUpdate(
+                spreadsheetId=sid,
+                body={
+                    "requests": [
+                        {
+                            "addSheet": {
+                                "properties": {
+                                    "title": sheet_name,
+                                    "gridProperties": {"rowCount": 1000, "columnCount": 26},
+                                }
+                            }
+                        }
+                    ]
+                },
+            )
+            .execute()
+        )
         if rows:
             headers, dict_rows = self._normalize_rows(rows, [])
             values = [headers] + [[row.get(h, "") for h in headers] for row in dict_rows]
-            ws.update("A1", values)  # type: ignore[arg-type]
+            self._set_values(sid, _rng(sheet_name, "A1"), values)
             self.rows = dict_rows
 
     def delete_sheet(
@@ -207,12 +330,23 @@ class ThaSheets:
         url: str | None = None,
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        spreadsheet = self._get_spreadsheet(sid)
-        try:
-            ws = spreadsheet.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
-            raise GoogleError(f"Sheet '{sheet_name}' not found in {sid}") from None
-        spreadsheet.del_worksheet(ws)
+        result = self._meta(sid, fields="sheets.properties")
+        sheet_id: int | None = None
+        for s in result.get("sheets", []):
+            if s["properties"]["title"] == sheet_name:
+                sheet_id = s["properties"]["sheetId"]
+                break
+        if sheet_id is None:
+            raise GoogleError(f"Sheet '{sheet_name}' not found in {sid}")
+        with_retry(
+            lambda: self._get_service()
+            .spreadsheets()
+            .batchUpdate(
+                spreadsheetId=sid,
+                body={"requests": [{"deleteSheet": {"sheetId": sheet_id}}]},
+            )
+            .execute()
+        )
 
     def share(
         self,
@@ -223,8 +357,16 @@ class ThaSheets:
         role: str = "reader",
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        spreadsheet = self._get_spreadsheet(sid)
-        spreadsheet.share(email, perm_type="user", role=role)
+        with_retry(
+            lambda: self._get_drive_service()
+            .permissions()
+            .create(
+                fileId=sid,
+                body={"type": "user", "role": role, "emailAddress": email},
+                sendNotificationEmail=False,
+            )
+            .execute()
+        )
 
     def upsert_rows(
         self,
@@ -240,28 +382,26 @@ class ThaSheets:
             return 0
 
         sid = self._resolve_id(spreadsheet_id, url)
-        ws = self._get_worksheet(sid, sheet_name)
+        name = self._resolve_sheet(sid, sheet_name)
         keys = [key] if isinstance(key, str) else list(key)
 
-        existing = ws.get_all_values()
-        existing_hdrs: list[str] = list(existing[0]) if existing else []
+        existing = self._get_values(sid, _rng(name), sheet_name=name)
+        existing_hdrs: list[str] = [str(h) for h in existing[0]] if existing else []
         norm_hdrs, dict_rows = self._normalize_rows(rows, existing_hdrs)
 
-        # Empty sheet — write everything fresh
         if not existing:
             values = [norm_hdrs] + [[row.get(h, "") for h in norm_hdrs] for row in dict_rows]
-            ws.update("A1", values)  # type: ignore[arg-type]
+            self._set_values(sid, _rng(name, "A1"), values)
             self.rows = dict_rows
             return len(dict_rows)
 
-        headers = list(existing[0])
+        headers = [str(h) for h in existing[0]]
         data_rows = existing[1:]
 
         missing_keys = [k for k in keys if k not in headers]
         if missing_keys:
             raise GoogleError(f"Key column(s) not found in sheet headers: {missing_keys}")
 
-        # Collect new columns from incoming rows, preserving order
         seen: set[str] = set(headers)
         new_cols: list[str] = []
         for row in dict_rows:
@@ -271,15 +411,16 @@ class ThaSheets:
                     seen.add(col)
         if new_cols:
             headers = headers + new_cols
-            ws.update("A1", [headers])  # type: ignore[arg-type]
+            self._set_values(sid, _rng(name, "A1"), [headers])
 
         col_index = {h: i for i, h in enumerate(headers)}
         key_col_indices = [col_index[k] for k in keys]
 
-        # Build key → list of sheet row numbers (1-indexed, data starts at row 2)
         index: dict[tuple[str, ...], list[int]] = {}
         for i, row_vals in enumerate(data_rows):
-            row_key = tuple(str(row_vals[c]) if c < len(row_vals) else "" for c in key_col_indices)
+            row_key = tuple(
+                str(row_vals[c]) if c < len(row_vals) else "" for c in key_col_indices
+            )
             index.setdefault(row_key, []).append(i + 2)
 
         cell_updates: list[dict[str, Any]] = []
@@ -306,19 +447,27 @@ class ThaSheets:
                     matches = [matches[0]]
                 elif on_conflict == "update_last":
                     matches = [matches[-1]]
-                # update_all: use all matches as-is
 
             for sheet_row in matches:
                 for col_name, val in row.items():
                     if col_name in col_index:
-                        cell = rowcol_to_a1(sheet_row, col_index[col_name] + 1)
-                        cell_updates.append({"range": cell, "values": [[val]]})
+                        cell = _a1(sheet_row, col_index[col_name] + 1)
+                        cell_updates.append({"range": _rng(name, cell), "values": [[val]]})
             upserted += 1
 
         if cell_updates:
-            ws.batch_update(cell_updates)
+            with_retry(
+                lambda: self._get_service()
+                .spreadsheets()
+                .values()
+                .batchUpdate(
+                    spreadsheetId=sid,
+                    body={"valueInputOption": _INPUT, "data": cell_updates},
+                )
+                .execute()
+            )
         if rows_to_append:
-            ws.append_rows(rows_to_append)
+            self._append_values(sid, _rng(name), rows_to_append)
 
         self.rows = dict_rows
         return upserted
@@ -331,6 +480,6 @@ class ThaSheets:
         sheet_name: str | None = None,
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        ws = self._get_worksheet(sid, sheet_name)
-        ws.clear()
+        name = self._resolve_sheet(sid, sheet_name)
+        self._clear_values(sid, _rng(name))
         self.rows = []
