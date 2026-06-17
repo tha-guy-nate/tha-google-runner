@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
 
 
@@ -20,14 +21,27 @@ def init() -> None:
         metavar="PATH",
         help="Path to the client_secret_*.json downloaded from the GCP console.",
     )
+    parser.add_argument(
+        "--scope",
+        action="append",
+        dest="scopes",
+        metavar="URL",
+        help=(
+            "Add a scope URL to request (can be repeated). "
+            "Defaults to all scopes (spreadsheets, docs, drive, slides, gmail). "
+            "Example: --scope https://www.googleapis.com/auth/spreadsheets"
+        ),
+    )
     args = parser.parse_args()
 
     from tha_google_runner.auth import (
         _CONFIG_DIR,
         _DEFAULT_CLIENT_SECRET,
         _DEFAULT_TOKEN,
-        _SCOPES,
+        _FULL_SCOPES,
     )
+
+    scopes = args.scopes if args.scopes else list(_FULL_SCOPES)
 
     _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Config directory: {_CONFIG_DIR}")
@@ -55,16 +69,18 @@ def init() -> None:
     creds: Credentials | None = None
     if _DEFAULT_TOKEN.exists():
         creds = Credentials.from_authorized_user_info(
-            json.loads(_DEFAULT_TOKEN.read_text()), _SCOPES
+            json.loads(_DEFAULT_TOKEN.read_text()), scopes
         )
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(str(_DEFAULT_CLIENT_SECRET), _SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(str(_DEFAULT_CLIENT_SECRET), scopes)
             creds = flow.run_local_server(port=0)
         _DEFAULT_TOKEN.write_text(creds.to_json())
+        if sys.platform != "win32":
+            _DEFAULT_TOKEN.chmod(0o600)
 
     print(f"Token saved to {_DEFAULT_TOKEN}")
     print("Setup complete — ThaDocs(), ThaSheets(), and ThaDrive() work without arguments.")

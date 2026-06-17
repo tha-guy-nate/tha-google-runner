@@ -7,7 +7,7 @@ from tha_google_runner.gmail import ThaGmail
 from tha_google_runner.sheets import ThaSheets
 from tha_google_runner.slides import ThaSlides
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 __all__ = [
     "GoogleError",
     "ThaDocs",

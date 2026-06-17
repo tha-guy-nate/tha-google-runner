@@ -1,23 +1,27 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
-from tha_google_runner.auth import build_credentials
+from tha_google_runner.auth import SCOPE_DOCUMENTS, build_credentials
 from tha_google_runner.errors import GoogleError, with_retry
 
 _URL_RE = re.compile(r"/document/d/([a-zA-Z0-9_-]+)")
 
 
 class ThaDocs:
+    _SCOPES: ClassVar[list[str]] = [SCOPE_DOCUMENTS]
+
     def __init__(
         self,
         *,
         credentials_file: str | None = None,
         token_file: str | None = None,
+        scopes: list[str] | None = None,
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
+        self._scopes = scopes if scopes is not None else self._SCOPES
         self._service: Any = None
         self.content: str = ""
 
@@ -25,7 +29,7 @@ class ThaDocs:
         if self._service is None:
             from googleapiclient.discovery import build
 
-            creds = build_credentials(self._credentials_file, self._token_file)
+            creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
             self._service = build("docs", "v1", credentials=creds)
         return self._service
 

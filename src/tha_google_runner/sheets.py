@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, cast
+from typing import Any, ClassVar, Literal, cast
 
 from googleapiclient.errors import HttpError
 
-from tha_google_runner.auth import build_credentials
+from tha_google_runner.auth import SCOPE_DRIVE, SCOPE_SPREADSHEETS, build_credentials
 from tha_google_runner.errors import GoogleError, with_retry
 
 OnConflict = Literal["update_all", "update_first", "update_last", "raise", "skip"]
@@ -29,14 +29,18 @@ def _rng(name: str, a1: str = "") -> str:
 
 
 class ThaSheets:
+    _SCOPES: ClassVar[list[str]] = [SCOPE_SPREADSHEETS, SCOPE_DRIVE]
+
     def __init__(
         self,
         *,
         credentials_file: str | None = None,
         token_file: str | None = None,
+        scopes: list[str] | None = None,
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
+        self._scopes = scopes if scopes is not None else self._SCOPES
         self._service: Any = None
         self._drive_service: Any = None
         self.rows: list[dict[str, Any]] = []
@@ -45,7 +49,7 @@ class ThaSheets:
         if self._service is None:
             from googleapiclient.discovery import build
 
-            creds = build_credentials(self._credentials_file, self._token_file)
+            creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
             self._service = build("sheets", "v4", credentials=creds)
         return self._service
 
@@ -53,7 +57,7 @@ class ThaSheets:
         if self._drive_service is None:
             from googleapiclient.discovery import build
 
-            creds = build_credentials(self._credentials_file, self._token_file)
+            creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
             self._drive_service = build("drive", "v3", credentials=creds)
         return self._drive_service
 

@@ -3,9 +3,9 @@ from __future__ import annotations
 import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any
+from typing import Any, ClassVar
 
-from tha_google_runner.auth import build_credentials
+from tha_google_runner.auth import SCOPE_GMAIL_READONLY, SCOPE_GMAIL_SEND, build_credentials
 from tha_google_runner.errors import GoogleError
 
 
@@ -43,21 +43,25 @@ def _header(message: dict[str, Any], name: str) -> str:
 
 
 class ThaGmail:
+    _SCOPES: ClassVar[list[str]] = [SCOPE_GMAIL_SEND, SCOPE_GMAIL_READONLY]
+
     def __init__(
         self,
         *,
         credentials_file: str | None = None,
         token_file: str | None = None,
+        scopes: list[str] | None = None,
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
+        self._scopes = scopes if scopes is not None else self._SCOPES
         self._service: Any = None
 
     def _get_service(self) -> Any:
         if self._service is None:
             from googleapiclient.discovery import build
 
-            creds = build_credentials(self._credentials_file, self._token_file)
+            creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
             self._service = build("gmail", "v1", credentials=creds)
         return self._service
 

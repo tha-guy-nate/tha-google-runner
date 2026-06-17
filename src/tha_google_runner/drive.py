@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
-from tha_google_runner.auth import build_credentials
+from tha_google_runner.auth import SCOPE_DRIVE_READONLY, build_credentials
 from tha_google_runner.errors import GoogleError, with_retry
 
 _ID_RE = re.compile(r"/d/([a-zA-Z0-9_-]+)|[?&]id=([a-zA-Z0-9_-]+)")
@@ -12,21 +12,25 @@ _DEFAULT_FIELDS = "id,name,mimeType,modifiedTime,size"
 
 
 class ThaDrive:
+    _SCOPES: ClassVar[list[str]] = [SCOPE_DRIVE_READONLY]
+
     def __init__(
         self,
         *,
         credentials_file: str | None = None,
         token_file: str | None = None,
+        scopes: list[str] | None = None,
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
+        self._scopes = scopes if scopes is not None else self._SCOPES
         self._service: Any = None
 
     def _get_service(self) -> Any:
         if self._service is None:
             from googleapiclient.discovery import build
 
-            creds = build_credentials(self._credentials_file, self._token_file)
+            creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
             self._service = build("drive", "v3", credentials=creds)
         return self._service
 
