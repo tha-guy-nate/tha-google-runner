@@ -79,7 +79,7 @@ A browser window opens, credentials are saved to your machine, and any `Tha*` cl
 ```python
 from tha_google_runner import ThaSheets
 
-sheets = ThaSheets()  # uses ADC; or pass credentials_file="client_secrets.json"
+sheets = ThaSheets()  # uses cached OAuth2 token (see Option 1 above); or pass credentials_file="client_secrets.json"
 
 # Read all rows (first row is headers)
 rows = sheets.read(spreadsheet_id="your-spreadsheet-id")
@@ -126,7 +126,7 @@ sheets.clear(spreadsheet_id="your-spreadsheet-id")
 ```python
 from tha_google_runner import ThaDocs
 
-docs = ThaDocs()  # uses ADC; or pass credentials_file="client_secrets.json"
+docs = ThaDocs()  # uses cached OAuth2 token (see Option 1 above); or pass credentials_file="client_secrets.json"
 
 # Read all text in a document
 text = docs.read(doc_id="your-document-id")
@@ -151,7 +151,7 @@ count = docs.replace(old_text="foo", new_text="bar", doc_id="your-document-id")
 ```python
 from tha_google_runner import ThaDrive
 
-drive = ThaDrive()  # uses ADC; or pass credentials_file="client_secrets.json"
+drive = ThaDrive()  # uses cached OAuth2 token (see Option 1 above); or pass credentials_file="client_secrets.json"
 
 # List all non-trashed files
 files = drive.list_files()
@@ -184,7 +184,7 @@ with open("output.pdf", "wb") as f:
 ```python
 from tha_google_runner import ThaSlides
 
-slides = ThaSlides()  # uses ADC; or pass credentials_file="client_secrets.json"
+slides = ThaSlides()  # uses cached OAuth2 token (see Option 1 above); or pass credentials_file="client_secrets.json"
 
 # Read all slides — returns a list of dicts, one per slide
 deck = slides.read(presentation_id="your-presentation-id")
@@ -212,7 +212,7 @@ Each dict in the returned list has:
 ```python
 from tha_google_runner import ThaGmail
 
-gmail = ThaGmail()  # uses ADC; or pass credentials_file="client_secrets.json"
+gmail = ThaGmail()  # uses cached OAuth2 token (see Option 1 above); or pass credentials_file="client_secrets.json"
 
 # Send a plain-text email
 gmail.send(to="recipient@example.com", subject="Hello", body="Hi there!")

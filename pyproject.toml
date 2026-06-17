@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "tha-google-runner"
 version = "0.1.4"
-description = "A Tabular Helper API library that wraps Google Sheets and Docs with a typed, consistent interface."
+description = "A Tabular Helper API library that wraps Google Sheets, Docs, Drive, Slides, and Gmail with a typed, consistent interface."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Nate Wright" }]
