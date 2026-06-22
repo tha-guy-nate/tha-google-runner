@@ -131,13 +131,19 @@ docs = ThaDocs()  # uses cached OAuth2 token (see Option 1 above); or pass crede
 # Read all text in a document
 text = docs.read(doc_id="your-document-id")
 
-# Append text to the end of a document
+# For multi-tab documents, target a specific tab by title or tab ID
+text = docs.read(doc_id="your-document-id", tab_id="Sheet1")
+
+# Append text to the end of a document (first tab by default)
 docs.append("\nNew paragraph.", doc_id="your-document-id")
+
+# Append to a specific tab
+docs.append("\nNew paragraph.", doc_id="your-document-id", tab_id="Notes")
 
 # Insert text immediately after a specific string
 docs.insert_after("Appendix", after="See also:", doc_id="your-document-id")
 
-# Replace all occurrences of a string
+# Replace all occurrences of a string (applies across all tabs)
 count = docs.replace(old_text="foo", new_text="bar", doc_id="your-document-id")
 ```
 
@@ -145,6 +151,8 @@ count = docs.replace(old_text="foo", new_text="bar", doc_id="your-document-id")
 > `https://docs.google.com/document/d/<document-id>/edit`
 >
 > You can also pass `url=` instead of `doc_id=` to any method.
+>
+> **Multi-tab documents:** Pass `tab_id=` to `read()`, `append()`, and `insert_after()` to target a specific tab by its title or tab ID. Without `tab_id`, all three methods operate on the first tab. The `replace()` method always applies across all tabs (Google Docs API behavior).
 
 ### ThaDrive
 
@@ -448,40 +456,43 @@ After a `read()`, `docs.content` is set to the full plain text of the document.
 
 ---
 
-### `read(*, doc_id=None, url=None) -> str`
+### `read(*, doc_id=None, url=None, tab_id=None) -> str`
 
-Read the full plain text of a document. Sets `docs.content`.
+Read the full plain text of a document. Sets `docs.content`. For multi-tab documents, `tab_id` selects which tab to read (by title or tab ID); defaults to the first tab.
 
 ```python
 text = docs.read(doc_id="document-id")
 text = docs.read(url="https://docs.google.com/document/d/.../edit")
+text = docs.read(doc_id="document-id", tab_id="Notes")
 ```
 
 ---
 
-### `append(text, *, doc_id=None, url=None) -> None`
+### `append(text, *, doc_id=None, url=None, tab_id=None) -> None`
 
-Append text to the end of a document.
+Append text to the end of a document. For multi-tab documents, `tab_id` selects which tab to append to (by title or tab ID); defaults to the first tab.
 
 ```python
 docs.append("\nNew section.", doc_id="document-id")
+docs.append("\nNew section.", doc_id="document-id", tab_id="Notes")
 ```
 
 ---
 
-### `insert_after(text, *, after, doc_id=None, url=None) -> None`
+### `insert_after(text, *, after, doc_id=None, url=None, tab_id=None) -> None`
 
-Insert text immediately after the first occurrence of `after` in the document. Raises `GoogleError` if `after` is not found.
+Insert text immediately after the first occurrence of `after` in the document. Raises `GoogleError` if `after` is not found. For multi-tab documents, `tab_id` selects which tab to search and insert into (by title or tab ID); defaults to the first tab.
 
 ```python
 docs.insert_after(" (updated)", after="Section 2", doc_id="document-id")
+docs.insert_after(" (updated)", after="Section 2", doc_id="document-id", tab_id="Notes")
 ```
 
 ---
 
 ### `replace(*, old_text, new_text, doc_id=None, url=None, match_case=True) -> int`
 
-Replace all occurrences of `old_text` with `new_text`. Returns the number of replacements made.
+Replace all occurrences of `old_text` with `new_text`. Returns the number of replacements made. Applies across all tabs (Google Docs API behavior).
 
 ```python
 count = docs.replace(old_text="draft", new_text="final", doc_id="document-id")
