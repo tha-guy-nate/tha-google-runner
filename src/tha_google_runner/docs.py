@@ -43,15 +43,22 @@ class ThaDocs:
             return doc_id
         raise GoogleError("Provide either doc_id= or url=")
 
+    def _fetch(self, service: Any, did: str) -> dict[str, Any]:
+        return with_retry(
+            lambda: service.documents().get(documentId=did, includeTabsContent=True).execute()
+        )
+
     def read(
         self,
         *,
         doc_id: str | None = None,
         url: str | None = None,
+        tab_id: str | None = None,
     ) -> str:
         did = self._resolve_id(doc_id, url)
-        doc = with_retry(lambda: self._get_service().documents().get(documentId=did).execute())
-        self.content = _extract_text(doc)
+        doc = self._fetch(self._get_service(), did)
+        body = _get_tab_body(doc, tab_id)
+        self.content = _extract_text(body)
         return self.content
 
     def append(
@@ -60,21 +67,22 @@ class ThaDocs:
         *,
         doc_id: str | None = None,
         url: str | None = None,
+        tab_id: str | None = None,
     ) -> None:
         did = self._resolve_id(doc_id, url)
         service = self._get_service()
-        doc = with_retry(lambda: service.documents().get(documentId=did).execute())
-        end_index = doc["body"]["content"][-1]["endIndex"] - 1
+        doc = self._fetch(service, did)
+        body = _get_tab_body(doc, tab_id)
+        end_index = body["content"][-1]["endIndex"] - 1
+        location: dict[str, Any] = {"index": end_index}
+        if tab_id is not None:
+            location["tabId"] = tab_id
         with_retry(
             lambda: (
                 service.documents()
                 .batchUpdate(
                     documentId=did,
-                    body={
-                        "requests": [
-                            {"insertText": {"location": {"index": end_index}, "text": text}}
-                        ]
-                    },
+                    body={"requests": [{"insertText": {"location": location, "text": text}}]},
                 )
                 .execute()
             )
@@ -87,26 +95,27 @@ class ThaDocs:
         after: str,
         doc_id: str | None = None,
         url: str | None = None,
+        tab_id: str | None = None,
     ) -> None:
         did = self._resolve_id(doc_id, url)
         service = self._get_service()
-        doc = with_retry(lambda: service.documents().get(documentId=did).execute())
-        runs = _text_runs(doc)
+        doc = self._fetch(service, did)
+        body = _get_tab_body(doc, tab_id)
+        runs = _text_runs(body)
         plain = "".join(t for _, t in runs)
         pos = plain.find(after)
         if pos == -1:
             raise GoogleError(f"String not found in document: {after!r}")
         insert_index = _map_char_to_index(runs, pos + len(after))
+        location: dict[str, Any] = {"index": insert_index}
+        if tab_id is not None:
+            location["tabId"] = tab_id
         with_retry(
             lambda: (
                 service.documents()
                 .batchUpdate(
                     documentId=did,
-                    body={
-                        "requests": [
-                            {"insertText": {"location": {"index": insert_index}, "text": text}}
-                        ]
-                    },
+                    body={"requests": [{"insertText": {"location": location, "text": text}}]},
                 )
                 .execute()
             )
@@ -146,9 +155,23 @@ class ThaDocs:
         return replies[0].get("replaceAllText", {}).get("occurrencesChanged", 0) if replies else 0
 
 
-def _text_runs(doc: dict[str, Any]) -> list[tuple[int, str]]:
+def _get_tab_body(doc: dict[str, Any], tab_id: str | None) -> dict[str, Any]:
+    """Return the body for the specified tab, defaulting to the first tab when tab_id is None."""
+    tabs = doc.get("tabs", [])
+    if not tabs:
+        return doc.get("body", {})
+    if tab_id is None:
+        return tabs[0].get("documentTab", {}).get("body", {})
+    for tab in tabs:
+        props = tab.get("tabProperties", {})
+        if props.get("tabId") == tab_id or props.get("title") == tab_id:
+            return tab.get("documentTab", {}).get("body", {})
+    raise GoogleError(f"Tab not found: {tab_id!r}")
+
+
+def _text_runs(body: dict[str, Any]) -> list[tuple[int, str]]:
     runs: list[tuple[int, str]] = []
-    for elem in doc.get("body", {}).get("content", []):
+    for elem in body.get("content", []):
         paragraph = elem.get("paragraph")
         if paragraph:
             for pe in paragraph.get("elements", []):
@@ -158,8 +181,8 @@ def _text_runs(doc: dict[str, Any]) -> list[tuple[int, str]]:
     return runs
 
 
-def _extract_text(doc: dict[str, Any]) -> str:
-    return "".join(t for _, t in _text_runs(doc))
+def _extract_text(body: dict[str, Any]) -> str:
+    return "".join(t for _, t in _text_runs(body))
 
 
 def _map_char_to_index(runs: list[tuple[int, str]], char_pos: int) -> int:
