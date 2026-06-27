@@ -98,7 +98,7 @@ class ThaDrive:
         fields: str = "*",
     ) -> dict[str, Any]:
         fid = self._resolve_id(file_id, url)
-        return with_retry(  # type: ignore[no-any-return]
+        return with_retry(
             lambda: self._get_service().files().get(fileId=fid, fields=fields).execute()
         )
 

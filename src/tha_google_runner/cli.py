@@ -68,13 +68,13 @@ def init() -> None:
 
     creds: Credentials | None = None
     if _DEFAULT_TOKEN.exists():
-        creds = Credentials.from_authorized_user_info(
+        creds = Credentials.from_authorized_user_info(  # type: ignore[no-untyped-call]
             json.loads(_DEFAULT_TOKEN.read_text()), scopes
         )
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            creds.refresh(Request())  # type: ignore[no-untyped-call]
         else:
             flow = InstalledAppFlow.from_client_secrets_file(str(_DEFAULT_CLIENT_SECRET), scopes)
             creds = flow.run_local_server(port=0)

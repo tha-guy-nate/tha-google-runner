@@ -38,7 +38,7 @@ def _extract_body(payload: dict[str, Any]) -> str:
 def _header(message: dict[str, Any], name: str) -> str:
     for h in message.get("payload", {}).get("headers", []):
         if h["name"].lower() == name.lower():
-            return h["value"]
+            return str(h["value"])
     return ""
 
 
