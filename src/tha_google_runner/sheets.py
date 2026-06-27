@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal
 
 from googleapiclient.errors import HttpError
 
@@ -93,7 +93,7 @@ class ThaSheets:
         sheets = result.get("sheets", [])
         if not sheets:
             raise GoogleError(f"Spreadsheet {sid} has no sheets")
-        return sheets[0]["properties"]["title"]
+        return sheets[0]["properties"]["title"]  # type: ignore[no-any-return]
 
     def _get_values(
         self, sid: str, range_: str, *, sheet_name: str | None = None
@@ -112,7 +112,7 @@ class ThaSheets:
                     .execute()
                 )
             )
-            return result.get("values", [])
+            return result.get("values", [])  # type: ignore[no-any-return]
         except HttpError as exc:
             if exc.resp.status in (400, 404) and sheet_name is not None:
                 raise GoogleError(f"Sheet '{sheet_name}' not found in {sid}") from None
@@ -177,10 +177,10 @@ class ThaSheets:
         if not rows:
             return existing_headers, []
         if isinstance(rows[0], dict):
-            dict_rows = cast(list[dict[str, Any]], rows)
+            dict_rows = rows
             headers = existing_headers if existing_headers else list(dict_rows[0].keys())
             return headers, dict_rows
-        list_rows = cast(list[list[Any]], rows)
+        list_rows = rows
         first_as_strs = [str(v) for v in list_rows[0]]
         if existing_headers:
             if first_as_strs == existing_headers:

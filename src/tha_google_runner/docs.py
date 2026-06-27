@@ -159,13 +159,13 @@ def _get_tab_body(doc: dict[str, Any], tab_id: str | None) -> dict[str, Any]:
     """Return the body for the specified tab, defaulting to the first tab when tab_id is None."""
     tabs = doc.get("tabs", [])
     if not tabs:
-        return doc.get("body", {})
+        return doc.get("body", {})  # type: ignore[no-any-return]
     if tab_id is None:
-        return tabs[0].get("documentTab", {}).get("body", {})
+        return tabs[0].get("documentTab", {}).get("body", {})  # type: ignore[no-any-return]
     for tab in tabs:
         props = tab.get("tabProperties", {})
         if props.get("tabId") == tab_id or props.get("title") == tab_id:
-            return tab.get("documentTab", {}).get("body", {})
+            return tab.get("documentTab", {}).get("body", {})  # type: ignore[no-any-return]
     raise GoogleError(f"Tab not found: {tab_id!r}")
 
 

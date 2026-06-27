@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tha-google-runner"
-version = "0.1.6"
+version = "0.1.7"
 description = "A Tabular Helper API library that wraps Google Sheets, Docs, Drive, Slides, and Gmail with a typed, consistent interface."
 readme = "README.md"
 license = { text = "MIT" }
@@ -57,6 +57,7 @@ target-version = "py310"
 select = ["E", "F", "I", "B", "UP", "RUF"]
 
 [tool.mypy]
+strict = true
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

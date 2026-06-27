@@ -101,11 +101,11 @@ def _oauth_credentials(
             # Token is missing needed scopes — expand to the union so previously-
             # consented scopes are not silently dropped on the next re-auth.
             effective_scopes = list(requested_set | token_scopes)
-        creds = Credentials.from_authorized_user_info(data, effective_scopes)
+        creds = Credentials.from_authorized_user_info(data, effective_scopes)  # type: ignore[no-untyped-call]
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            creds.refresh(Request())  # type: ignore[no-untyped-call]
         else:
             flow = InstalledAppFlow.from_client_secrets_file(credentials_file, effective_scopes)
             creds = flow.run_local_server(port=0)
