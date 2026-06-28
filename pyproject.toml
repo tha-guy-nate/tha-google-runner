@@ -45,6 +45,7 @@ tha-google-init = "tha_google_runner.cli:init"
 [project.urls]
 Homepage = "https://github.com/tha-guy-nate/tha-google-runner"
 Issues = "https://github.com/tha-guy-nate/tha-google-runner/issues"
+Changelog = "https://github.com/tha-guy-nate/tha-google-runner/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tha_google_runner"]
