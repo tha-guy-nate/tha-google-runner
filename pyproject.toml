@@ -37,6 +37,7 @@ dev = [
     "pytest>=9.1.0",
     "ruff>=0.15.17",
     "mypy>=2.1.0",
+    "deptry>=0.25.1",
 ]
 
 [project.scripts]
@@ -63,3 +64,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.deptry]
+known_first_party = ["tha_google_runner"]
+optional_dependencies_dev_groups = ["dev"]
