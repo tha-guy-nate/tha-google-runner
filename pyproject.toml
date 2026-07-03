@@ -38,6 +38,8 @@ dev = [
     "ruff>=0.15.17",
     "mypy>=2.1.0",
     "deptry>=0.25.1",
+    "pip-audit>=2.10.1",
+    "pytest-cov>=7.1.0",
 ]
 
 [project.scripts]
@@ -68,3 +70,6 @@ testpaths = ["tests"]
 [tool.deptry]
 known_first_party = ["tha_google_runner"]
 optional_dependencies_dev_groups = ["dev"]
+
+[tool.coverage.run]
+source = ["src"]
