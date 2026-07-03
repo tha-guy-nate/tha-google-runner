@@ -5,6 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/tha-google-runner)](https://pypi.org/project/tha-google-runner/)
 [![Python](https://img.shields.io/pypi/pyversions/tha-google-runner)](https://pypi.org/project/tha-google-runner/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
+[![size](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fpypi.org%2Fpypi%2Ftha-google-runner%2Fjson&label=size&query=%24.urls%5B0%5D.size&suffix=%20B)](https://pypi.org/project/tha-google-runner/#files)
 
 A Tabular Helper API library that wraps Google Sheets, Docs, Drive, Slides, and Gmail with a typed, consistent interface.
 
