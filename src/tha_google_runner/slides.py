@@ -51,7 +51,7 @@ class ThaSlides:
             if not m:
                 raise GoogleError(f"Could not parse presentation ID from URL: {url}")
             result = m.group(1) or m.group(2)
-            if result is None:
+            if result is None:  # pragma: no cover — unreachable, both alternatives require 1+ chars
                 raise GoogleError(f"Could not parse presentation ID from URL: {url}")
             return result
         if presentation_id is not None:

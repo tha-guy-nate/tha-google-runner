@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-07-04
+### Fixed
+- `__init__.py` `__version__` was stale at `0.1.5` while `pyproject.toml` and PyPI were already at `0.1.7` — now back in sync.
+- Test coverage gaps across the whole package: added tests for `auth.build_credentials`/`_oauth_credentials` (previously untested — 40% coverage), `cli.init()` (previously untested — 0% coverage), and smaller gaps in `docs.py`, `drive.py`, `errors.py`, `gmail.py`, `sheets.py`, and `slides.py` (lazy service-building, HTTP error re-raise branches, edge cases in text extraction and row normalization). Marked a handful of genuinely unreachable defensive branches (dead regex fallbacks, optional-import fallbacks for required deps) as `pragma: no cover`. Coverage is now 99% locally (100% on CI's Linux runner, where two platform-guarded `chmod` lines execute).
+
 ## [0.1.7] - 2026-06-27
 ### Changed
 - Enabled mypy strict mode for comprehensive type checking.

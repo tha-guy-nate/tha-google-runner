@@ -1,7 +1,10 @@
 import base64
 from email import message_from_bytes
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from tha_google_runner.errors import GoogleError
 from tha_google_runner.gmail import ThaGmail
 
 # ---------------------------------------------------------------------------
@@ -192,6 +195,34 @@ def test_read_multipart_prefers_plain_text() -> None:
     assert result["body"] == "plain text"
 
 
+def test_read_multipart_falls_back_to_first_nonempty_part() -> None:
+    g, svc = make_gmail()
+    message = {
+        "id": "m1",
+        "threadId": "t1",
+        "payload": {
+            "mimeType": "multipart/mixed",
+            "headers": [],
+            "parts": [
+                {"mimeType": "application/octet-stream", "body": {}},
+                {"mimeType": "text/html", "body": {"data": _b64("<b>html only</b>")}},
+            ],
+        },
+    }
+    svc.users().messages().get().execute.return_value = message
+
+    result = g.read(message_id="m1")
+    assert result["body"] == "<b>html only</b>"
+
+
+def test_read_raises_when_message_not_found() -> None:
+    g, svc = make_gmail()
+    svc.users().messages().get().execute.return_value = {}
+
+    with pytest.raises(GoogleError, match="Message not found"):
+        g.read(message_id="missing")
+
+
 def test_read_calls_api_with_full_format() -> None:
     g, svc = make_gmail()
     svc.users().messages().get().execute.return_value = _message()
@@ -199,6 +230,24 @@ def test_read_calls_api_with_full_format() -> None:
     g.read(message_id="abc")
 
     svc.users().messages().get.assert_called_with(userId="me", id="abc", format="full")
+
+
+def test_get_service_builds_and_caches_lazily() -> None:
+    g = ThaGmail(credentials_file="secret.json", token_file="token.json")
+    mock_service = MagicMock()
+    mock_service.users().messages().send().execute.return_value = {"id": "s1"}
+
+    with (
+        patch("tha_google_runner.gmail.build_credentials") as mock_build_creds,
+        patch("googleapiclient.discovery.build") as mock_build,
+    ):
+        mock_build_creds.return_value = "creds"
+        mock_build.return_value = mock_service
+        g.send(to="a@b.com", subject="x", body="y")
+        g.send(to="a@b.com", subject="x", body="y")
+
+    mock_build_creds.assert_called_once_with("secret.json", "token.json", g._SCOPES)
+    mock_build.assert_called_once_with("gmail", "v1", credentials="creds")
 
 
 def test_service_is_built_once() -> None:

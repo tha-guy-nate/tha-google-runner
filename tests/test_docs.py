@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tha_google_runner.docs import ThaDocs, _extract_text, _get_tab_body, _text_runs
+from tha_google_runner.docs import (
+    ThaDocs,
+    _extract_text,
+    _get_tab_body,
+    _map_char_to_index,
+    _text_runs,
+)
 from tha_google_runner.errors import GoogleError
 
 # ---------------------------------------------------------------------------
@@ -51,6 +57,29 @@ def make_docs(doc_response: dict | None = None) -> tuple[ThaDocs, MagicMock]:
     docs = ThaDocs()
     docs._service = svc
     return docs, svc
+
+
+# ---------------------------------------------------------------------------
+# _get_service
+# ---------------------------------------------------------------------------
+
+
+def test_get_service_builds_and_caches_lazily() -> None:
+    docs = ThaDocs(credentials_file="secret.json", token_file="token.json")
+    mock_service = MagicMock()
+    mock_service.documents().get().execute.return_value = _make_doc()
+
+    with (
+        patch("tha_google_runner.docs.build_credentials") as mock_build_creds,
+        patch("googleapiclient.discovery.build") as mock_build,
+    ):
+        mock_build_creds.return_value = "creds"
+        mock_build.return_value = mock_service
+        docs.read(doc_id="d1")
+        docs.read(doc_id="d1")
+
+    mock_build_creds.assert_called_once_with("secret.json", "token.json", docs._SCOPES)
+    mock_build.assert_called_once_with("docs", "v1", credentials="creds")
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +180,14 @@ def test_insert_after_raises_when_not_found() -> None:
         docs.insert_after("x", after="missing", doc_id="d1")
 
 
+def test_insert_after_at_very_end_of_text() -> None:
+    docs, svc = make_docs(_make_doc("hello world"))
+    docs.insert_after("!", after="world", doc_id="d1")
+    req = svc.documents().batchUpdate.call_args[1]["body"]["requests"][0]
+    assert req["insertText"]["text"] == "!"
+    assert req["insertText"]["location"]["index"] == 12
+
+
 def test_insert_after_includes_tab_id_in_location() -> None:
     docs, svc = make_docs(_make_tabbed_doc("hello world", "other"))
     docs.insert_after(" there", after="hello", doc_id="d1", tab_id="t.aaa")
@@ -214,6 +251,14 @@ def test_get_tab_body_raises_on_unknown_tab() -> None:
 # ---------------------------------------------------------------------------
 # _text_runs / _extract_text
 # ---------------------------------------------------------------------------
+
+
+def test_map_char_to_index_past_last_run_returns_run_end() -> None:
+    assert _map_char_to_index([(1, "hello")], 5) == 6
+
+
+def test_map_char_to_index_empty_runs_returns_one() -> None:
+    assert _map_char_to_index([], 0) == 1
 
 
 def test_text_runs_skips_non_paragraph_elements() -> None:
