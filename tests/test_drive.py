@@ -43,6 +43,29 @@ def _mock_downloader(content: bytes) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
+# _get_service
+# ---------------------------------------------------------------------------
+
+
+def test_get_service_builds_and_caches_lazily() -> None:
+    drive = ThaDrive(credentials_file="secret.json", token_file="token.json")
+    mock_service = MagicMock()
+    mock_service.files().get().execute.return_value = {"id": "f1"}
+
+    with (
+        patch("tha_google_runner.drive.build_credentials") as mock_build_creds,
+        patch("googleapiclient.discovery.build") as mock_build,
+    ):
+        mock_build_creds.return_value = "creds"
+        mock_build.return_value = mock_service
+        drive.get(file_id="f1")
+        drive.get(file_id="f1")
+
+    mock_build_creds.assert_called_once_with("secret.json", "token.json", drive._SCOPES)
+    mock_build.assert_called_once_with("drive", "v3", credentials="creds")
+
+
+# ---------------------------------------------------------------------------
 # _resolve_id
 # ---------------------------------------------------------------------------
 
@@ -140,6 +163,32 @@ def test_search_escapes_single_quotes() -> None:
     drive.search("it's a file")
     call_kwargs = svc.files().list.call_args[1]
     assert "it\\'s a file" in call_kwargs["q"]
+
+
+# ---------------------------------------------------------------------------
+# export
+# ---------------------------------------------------------------------------
+
+
+def test_export_returns_bytes() -> None:
+    content = b"exported text content"
+    drive, svc = make_drive()
+
+    with patch("googleapiclient.http.MediaIoBaseDownload", side_effect=_mock_downloader(content)):
+        result = drive.export(file_id="f1", mime_type="text/plain")
+
+    svc.files().export_media.assert_called_with(fileId="f1", mimeType="text/plain")
+    assert result == content
+
+
+def test_export_accepts_url() -> None:
+    content = b"data"
+    drive, svc = make_drive()
+
+    with patch("googleapiclient.http.MediaIoBaseDownload", side_effect=_mock_downloader(content)):
+        drive.export(url="https://drive.google.com/file/d/xyz/view")
+
+    svc.files().export_media.assert_called_with(fileId="xyz", mimeType="text/plain")
 
 
 # ---------------------------------------------------------------------------

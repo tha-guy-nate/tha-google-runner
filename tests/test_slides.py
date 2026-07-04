@@ -1,9 +1,9 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from tha_google_runner.errors import GoogleError
-from tha_google_runner.slides import ThaSlides
+from tha_google_runner.slides import ThaSlides, _extract_text
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,6 +52,19 @@ def make_slides(presentation: dict) -> ThaSlides:
     ts = ThaSlides()
     ts._service = svc
     return ts
+
+
+# ---------------------------------------------------------------------------
+# _extract_text
+# ---------------------------------------------------------------------------
+
+
+def test_extract_text_none_returns_empty_string() -> None:
+    assert _extract_text(None) == ""
+
+
+def test_extract_text_empty_dict_returns_empty_string() -> None:
+    assert _extract_text({}) == ""
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +217,24 @@ def test_get_returns_raw_presentation() -> None:
     ts = make_slides(raw)
     result = ts.get(presentation_id="p")
     assert result == raw
+
+
+def test_get_service_builds_and_caches_lazily() -> None:
+    ts = ThaSlides(credentials_file="secret.json", token_file="token.json")
+    mock_service = MagicMock()
+    mock_service.presentations().get().execute.return_value = {"presentationId": "p"}
+
+    with (
+        patch("tha_google_runner.slides.build_credentials") as mock_build_creds,
+        patch("googleapiclient.discovery.build") as mock_build,
+    ):
+        mock_build_creds.return_value = "creds"
+        mock_build.return_value = mock_service
+        ts.get(presentation_id="p")
+        ts.get(presentation_id="p")
+
+    mock_build_creds.assert_called_once_with("secret.json", "token.json", ts._SCOPES)
+    mock_build.assert_called_once_with("slides", "v1", credentials="creds")
 
 
 def test_service_is_built_once() -> None:

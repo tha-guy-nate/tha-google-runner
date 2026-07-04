@@ -54,6 +54,19 @@ def make_http_error(status: int) -> HttpError:
 
 
 # ---------------------------------------------------------------------------
+# _normalize_rows
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_rows_empty_returns_existing_headers() -> None:
+    service = make_mock_service()
+    sheets = make_sheets(service)
+    headers, dict_rows = sheets._normalize_rows([], ["name", "age"])
+    assert headers == ["name", "age"]
+    assert dict_rows == []
+
+
+# ---------------------------------------------------------------------------
 # _resolve_id
 # ---------------------------------------------------------------------------
 
@@ -152,6 +165,38 @@ def test_read_raises_on_missing_sheet_name() -> None:
     sheets = make_sheets(service)
     with pytest.raises(GoogleError):
         sheets.read(spreadsheet_id="sheet-id", sheet_name="Nope")
+
+
+def test_meta_reraises_non_404_http_error() -> None:
+    service = make_mock_service()
+    service.spreadsheets.return_value.get.return_value.execute.side_effect = make_http_error(500)
+    sheets = make_sheets(service)
+    with pytest.raises(HttpError):
+        sheets.read(spreadsheet_id="sheet-id")
+
+
+def test_get_values_reraises_when_sheet_name_not_given() -> None:
+    service = make_mock_service()
+    _vals(service).get.return_value.execute.side_effect = make_http_error(404)
+    sheets = make_sheets(service)
+    with pytest.raises(HttpError):
+        sheets._get_values("sheet-id", "Sheet1!A:Z", sheet_name=None)
+
+
+def test_get_values_reraises_non_400_404_http_error() -> None:
+    service = make_mock_service()
+    _vals(service).get.return_value.execute.side_effect = make_http_error(500)
+    sheets = make_sheets(service)
+    with pytest.raises(HttpError):
+        sheets.read(spreadsheet_id="sheet-id", sheet_name="Nope")
+
+
+def test_resolve_sheet_raises_when_no_sheets() -> None:
+    service = make_mock_service()
+    service.spreadsheets.return_value.get.return_value.execute.return_value = {"sheets": []}
+    sheets = make_sheets(service)
+    with pytest.raises(GoogleError, match="has no sheets"):
+        sheets.read(spreadsheet_id="sheet-id")
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +383,24 @@ def test_delete_calls_drive_files_delete() -> None:
     sheets.delete(spreadsheet_id="sheet-id")
     drive.files.return_value.delete.assert_called_once_with(fileId="sheet-id")
     assert sheets.rows == []
+
+
+def test_get_drive_service_builds_and_caches_lazily() -> None:
+    sheets = ThaSheets(credentials_file="secret.json", token_file="token.json")
+    sheets._service = make_mock_service()
+    mock_drive_service = MagicMock()
+
+    with (
+        patch("tha_google_runner.sheets.build_credentials") as mock_build_creds,
+        patch("googleapiclient.discovery.build") as mock_build,
+    ):
+        mock_build_creds.return_value = "creds"
+        mock_build.return_value = mock_drive_service
+        sheets.delete(spreadsheet_id="sheet-id")
+        sheets.delete(spreadsheet_id="sheet-id")
+
+    mock_build_creds.assert_called_once_with("secret.json", "token.json", sheets._scopes)
+    mock_build.assert_called_once_with("drive", "v3", credentials="creds")
 
 
 # ---------------------------------------------------------------------------
