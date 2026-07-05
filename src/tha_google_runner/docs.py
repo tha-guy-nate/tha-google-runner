@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
+from tha_google_runner._rest import RestClient
 from tha_google_runner.auth import SCOPE_DOCUMENTS, build_credentials
-from tha_google_runner.errors import GoogleError, with_retry
+from tha_google_runner.errors import GoogleError
 
 _URL_RE = re.compile(r"/document/d/([a-zA-Z0-9_-]+)")
+_DOCS_BASE = "https://docs.googleapis.com/v1/documents"
 
 
 class ThaDocs:
@@ -18,20 +20,20 @@ class ThaDocs:
         credentials_file: str | None = None,
         token_file: str | None = None,
         scopes: list[str] | None = None,
+        backend: Literal["requests", "httpx"] = "requests",
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
         self._scopes = scopes if scopes is not None else self._SCOPES
-        self._service: Any = None
+        self._backend = backend
+        self._rest: RestClient | None = None
         self.content: str = ""
 
-    def _get_service(self) -> Any:
-        if self._service is None:
-            from googleapiclient.discovery import build
-
+    def _get_rest(self) -> RestClient:
+        if self._rest is None:
             creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
-            self._service = build("docs", "v1", credentials=creds)
-        return self._service
+            self._rest = RestClient(creds, backend=self._backend)
+        return self._rest
 
     def _resolve_id(self, doc_id: str | None, url: str | None) -> str:
         if url is not None:
@@ -43,9 +45,14 @@ class ThaDocs:
             return doc_id
         raise GoogleError("Provide either doc_id= or url=")
 
-    def _fetch(self, service: Any, did: str) -> dict[str, Any]:
-        return with_retry(
-            lambda: service.documents().get(documentId=did, includeTabsContent=True).execute()
+    def _fetch(self, did: str) -> dict[str, Any]:
+        return self._get_rest().get(  # type: ignore[no-any-return]
+            f"{_DOCS_BASE}/{did}", params={"includeTabsContent": "true"}
+        )
+
+    def _batch_update(self, did: str, requests: list[dict[str, Any]]) -> dict[str, Any]:
+        return self._get_rest().post(  # type: ignore[no-any-return]
+            f"{_DOCS_BASE}/{did}:batchUpdate", json={"requests": requests}
         )
 
     def read(
@@ -56,7 +63,7 @@ class ThaDocs:
         tab_id: str | None = None,
     ) -> str:
         did = self._resolve_id(doc_id, url)
-        doc = self._fetch(self._get_service(), did)
+        doc = self._fetch(did)
         body = _get_tab_body(doc, tab_id)
         self.content = _extract_text(body)
         return self.content
@@ -70,23 +77,13 @@ class ThaDocs:
         tab_id: str | None = None,
     ) -> None:
         did = self._resolve_id(doc_id, url)
-        service = self._get_service()
-        doc = self._fetch(service, did)
+        doc = self._fetch(did)
         body = _get_tab_body(doc, tab_id)
         end_index = body["content"][-1]["endIndex"] - 1
         location: dict[str, Any] = {"index": end_index}
         if tab_id is not None:
             location["tabId"] = tab_id
-        with_retry(
-            lambda: (
-                service.documents()
-                .batchUpdate(
-                    documentId=did,
-                    body={"requests": [{"insertText": {"location": location, "text": text}}]},
-                )
-                .execute()
-            )
-        )
+        self._batch_update(did, [{"insertText": {"location": location, "text": text}}])
 
     def insert_after(
         self,
@@ -98,8 +95,7 @@ class ThaDocs:
         tab_id: str | None = None,
     ) -> None:
         did = self._resolve_id(doc_id, url)
-        service = self._get_service()
-        doc = self._fetch(service, did)
+        doc = self._fetch(did)
         body = _get_tab_body(doc, tab_id)
         runs = _text_runs(body)
         plain = "".join(t for _, t in runs)
@@ -110,16 +106,7 @@ class ThaDocs:
         location: dict[str, Any] = {"index": insert_index}
         if tab_id is not None:
             location["tabId"] = tab_id
-        with_retry(
-            lambda: (
-                service.documents()
-                .batchUpdate(
-                    documentId=did,
-                    body={"requests": [{"insertText": {"location": location, "text": text}}]},
-                )
-                .execute()
-            )
-        )
+        self._batch_update(did, [{"insertText": {"location": location, "text": text}}])
 
     def replace(
         self,
@@ -131,25 +118,16 @@ class ThaDocs:
         match_case: bool = True,
     ) -> int:
         did = self._resolve_id(doc_id, url)
-        result = with_retry(
-            lambda: (
-                self._get_service()
-                .documents()
-                .batchUpdate(
-                    documentId=did,
-                    body={
-                        "requests": [
-                            {
-                                "replaceAllText": {
-                                    "containsText": {"text": old_text, "matchCase": match_case},
-                                    "replaceText": new_text,
-                                }
-                            }
-                        ]
-                    },
-                )
-                .execute()
-            )
+        result = self._batch_update(
+            did,
+            [
+                {
+                    "replaceAllText": {
+                        "containsText": {"text": old_text, "matchCase": match_case},
+                        "replaceText": new_text,
+                    }
+                }
+            ],
         )
         replies = result.get("replies", [{}])
         return replies[0].get("replaceAllText", {}).get("occurrencesChanged", 0) if replies else 0
