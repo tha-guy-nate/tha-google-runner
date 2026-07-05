@@ -1,9 +1,9 @@
-import io
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tha_google_runner.drive import ThaDrive
+from tha_google_runner.drive import _DRIVE_BASE, ThaDrive
 from tha_google_runner.errors import GoogleError
 
 # ---------------------------------------------------------------------------
@@ -11,58 +11,35 @@ from tha_google_runner.errors import GoogleError
 # ---------------------------------------------------------------------------
 
 
-def make_drive(files: list | None = None) -> tuple[ThaDrive, MagicMock]:
-    svc = MagicMock()
-    svc.files().list().execute.return_value = {"files": files or [], "nextPageToken": None}
-    svc.files().get().execute.return_value = {"id": "f1", "name": "test.pdf"}
+def make_drive(files: list[dict[str, Any]] | None = None) -> tuple[ThaDrive, MagicMock]:
+    rest = MagicMock()
+    rest.get.return_value = {"files": files or [], "nextPageToken": None}
     drive = ThaDrive()
-    drive._service = svc
-    return drive, svc
-
-
-def _mock_downloader(content: bytes) -> MagicMock:
-    buf_holder: list[io.BytesIO] = []
-
-    def fake_download(buf: io.BytesIO, request: object) -> MagicMock:
-        buf_holder.append(buf)
-        dl = MagicMock()
-        call_count = 0
-
-        def next_chunk() -> tuple[MagicMock, bool]:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                buf.write(content)
-                return MagicMock(), True
-            return MagicMock(), True
-
-        dl.next_chunk.side_effect = next_chunk
-        return dl
-
-    return fake_download
+    drive._rest = rest
+    return drive, rest
 
 
 # ---------------------------------------------------------------------------
-# _get_service
+# _get_rest
 # ---------------------------------------------------------------------------
 
 
-def test_get_service_builds_and_caches_lazily() -> None:
+def test_get_rest_builds_and_caches_lazily() -> None:
     drive = ThaDrive(credentials_file="secret.json", token_file="token.json")
-    mock_service = MagicMock()
-    mock_service.files().get().execute.return_value = {"id": "f1"}
+    mock_rest = MagicMock()
+    mock_rest.get.return_value = {"id": "f1"}
 
     with (
         patch("tha_google_runner.drive.build_credentials") as mock_build_creds,
-        patch("googleapiclient.discovery.build") as mock_build,
+        patch("tha_google_runner.drive.RestClient") as mock_rest_cls,
     ):
         mock_build_creds.return_value = "creds"
-        mock_build.return_value = mock_service
+        mock_rest_cls.return_value = mock_rest
         drive.get(file_id="f1")
         drive.get(file_id="f1")
 
-    mock_build_creds.assert_called_once_with("secret.json", "token.json", drive._SCOPES)
-    mock_build.assert_called_once_with("drive", "v3", credentials="creds")
+    mock_build_creds.assert_called_once_with("secret.json", "token.json", drive._scopes)
+    mock_rest_cls.assert_called_once_with("creds", backend="requests")
 
 
 # ---------------------------------------------------------------------------
@@ -71,15 +48,17 @@ def test_get_service_builds_and_caches_lazily() -> None:
 
 
 def test_resolve_id_accepts_raw_id() -> None:
-    drive, svc = make_drive()
+    drive, rest = make_drive()
+    rest.get.return_value = {"id": "abc123"}
     drive.get(file_id="abc123")
-    svc.files().get.assert_called_with(fileId="abc123", fields="*")
+    rest.get.assert_called_with(f"{_DRIVE_BASE}/files/abc123", params={"fields": "*"})
 
 
 def test_resolve_id_accepts_full_url() -> None:
-    drive, svc = make_drive()
+    drive, rest = make_drive()
+    rest.get.return_value = {"id": "abc123"}
     drive.get(url="https://drive.google.com/file/d/abc123/view")
-    svc.files().get.assert_called_with(fileId="abc123", fields="*")
+    rest.get.assert_called_with(f"{_DRIVE_BASE}/files/abc123", params={"fields": "*"})
 
 
 def test_resolve_id_raises_on_invalid_url() -> None:
@@ -107,34 +86,34 @@ def test_list_files_returns_files() -> None:
 
 
 def test_list_files_filters_trashed() -> None:
-    drive, svc = make_drive()
+    drive, rest = make_drive()
     drive.list_files()
-    call_kwargs = svc.files().list.call_args[1]
-    assert "trashed = false" in call_kwargs["q"]
+    _, kwargs = rest.get.call_args
+    assert "trashed = false" in kwargs["params"]["q"]
 
 
 def test_list_files_adds_folder_filter() -> None:
-    drive, svc = make_drive()
+    drive, rest = make_drive()
     drive.list_files(folder_id="folder-abc")
-    call_kwargs = svc.files().list.call_args[1]
-    assert "'folder-abc' in parents" in call_kwargs["q"]
+    _, kwargs = rest.get.call_args
+    assert "'folder-abc' in parents" in kwargs["params"]["q"]
 
 
 def test_list_files_adds_custom_query() -> None:
-    drive, svc = make_drive()
+    drive, rest = make_drive()
     drive.list_files(query="mimeType = 'application/pdf'")
-    call_kwargs = svc.files().list.call_args[1]
-    assert "mimeType = 'application/pdf'" in call_kwargs["q"]
+    _, kwargs = rest.get.call_args
+    assert "mimeType = 'application/pdf'" in kwargs["params"]["q"]
 
 
 def test_list_files_paginates() -> None:
-    svc = MagicMock()
-    svc.files().list().execute.side_effect = [
+    rest = MagicMock()
+    rest.get.side_effect = [
         {"files": [{"id": "1"}], "nextPageToken": "tok"},
         {"files": [{"id": "2"}], "nextPageToken": None},
     ]
     drive = ThaDrive()
-    drive._service = svc
+    drive._rest = rest
     result = drive.list_files()
     assert [f["id"] for f in result] == ["1", "2"]
 
@@ -145,24 +124,24 @@ def test_list_files_paginates() -> None:
 
 
 def test_search_contains_by_default() -> None:
-    drive, svc = make_drive()
+    drive, rest = make_drive()
     drive.search("report")
-    call_kwargs = svc.files().list.call_args[1]
-    assert "name contains 'report'" in call_kwargs["q"]
+    _, kwargs = rest.get.call_args
+    assert "name contains 'report'" in kwargs["params"]["q"]
 
 
 def test_search_exact_uses_equals() -> None:
-    drive, svc = make_drive()
+    drive, rest = make_drive()
     drive.search("report.csv", exact=True)
-    call_kwargs = svc.files().list.call_args[1]
-    assert "name = 'report.csv'" in call_kwargs["q"]
+    _, kwargs = rest.get.call_args
+    assert "name = 'report.csv'" in kwargs["params"]["q"]
 
 
 def test_search_escapes_single_quotes() -> None:
-    drive, svc = make_drive()
+    drive, rest = make_drive()
     drive.search("it's a file")
-    call_kwargs = svc.files().list.call_args[1]
-    assert "it\\'s a file" in call_kwargs["q"]
+    _, kwargs = rest.get.call_args
+    assert "it\\'s a file" in kwargs["params"]["q"]
 
 
 # ---------------------------------------------------------------------------
@@ -172,23 +151,26 @@ def test_search_escapes_single_quotes() -> None:
 
 def test_export_returns_bytes() -> None:
     content = b"exported text content"
-    drive, svc = make_drive()
+    drive, rest = make_drive()
+    rest.download.return_value = content
 
-    with patch("googleapiclient.http.MediaIoBaseDownload", side_effect=_mock_downloader(content)):
-        result = drive.export(file_id="f1", mime_type="text/plain")
+    result = drive.export(file_id="f1", mime_type="text/plain")
 
-    svc.files().export_media.assert_called_with(fileId="f1", mimeType="text/plain")
+    rest.download.assert_called_with(
+        f"{_DRIVE_BASE}/files/f1/export", params={"mimeType": "text/plain"}
+    )
     assert result == content
 
 
 def test_export_accepts_url() -> None:
-    content = b"data"
-    drive, svc = make_drive()
+    drive, rest = make_drive()
+    rest.download.return_value = b"data"
 
-    with patch("googleapiclient.http.MediaIoBaseDownload", side_effect=_mock_downloader(content)):
-        drive.export(url="https://drive.google.com/file/d/xyz/view")
+    drive.export(url="https://drive.google.com/file/d/xyz/view")
 
-    svc.files().export_media.assert_called_with(fileId="xyz", mimeType="text/plain")
+    rest.download.assert_called_with(
+        f"{_DRIVE_BASE}/files/xyz/export", params={"mimeType": "text/plain"}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -198,23 +180,22 @@ def test_export_accepts_url() -> None:
 
 def test_download_returns_bytes() -> None:
     content = b"PDF content here"
-    drive, svc = make_drive()
+    drive, rest = make_drive()
+    rest.download.return_value = content
 
-    with patch("googleapiclient.http.MediaIoBaseDownload", side_effect=_mock_downloader(content)):
-        result = drive.download(file_id="f1")
+    result = drive.download(file_id="f1")
 
-    svc.files().get_media.assert_called_with(fileId="f1")
+    rest.download.assert_called_with(f"{_DRIVE_BASE}/files/f1", params={"alt": "media"})
     assert result == content
 
 
 def test_download_accepts_url() -> None:
-    content = b"data"
-    drive, svc = make_drive()
+    drive, rest = make_drive()
+    rest.download.return_value = b"data"
 
-    with patch("googleapiclient.http.MediaIoBaseDownload", side_effect=_mock_downloader(content)):
-        drive.download(url="https://drive.google.com/file/d/xyz/view")
+    drive.download(url="https://drive.google.com/file/d/xyz/view")
 
-    svc.files().get_media.assert_called_with(fileId="xyz")
+    rest.download.assert_called_with(f"{_DRIVE_BASE}/files/xyz", params={"alt": "media"})
 
 
 def test_download_raises_without_id_or_url() -> None:
