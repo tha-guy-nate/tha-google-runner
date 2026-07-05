@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-04
+### Fixed
+- `pyproject.toml` `keywords` only covered `google`/`sheets`/`docs` even though the library also wraps Drive, Slides, and Gmail — added `drive`, `slides`, `gmail`. Also removed the now-stale `gspread` GitHub topic (dropped entirely in the 0.2.0 REST migration).
+
 ## [0.2.0] - 2026-07-04
 ### Changed
 - Replaced `google-api-python-client` (and the unused `gspread` dependency) with direct REST calls over `tha-req-runner` across all five classes (`ThaSheets`, `ThaDocs`, `ThaDrive`, `ThaSlides`, `ThaGmail`). Drops `google-api-python-client`, `gspread`, `httplib2`, `google-auth-httplib2`, `uritemplate`, `google-api-core`, `googleapis-common-protos`, `protobuf`, and `proto-plus` — the heaviest of which (`google-api-python-client`) was a 15.6MB wheel on its own. `google-auth`/`google-auth-oauthlib` are kept for credential/token handling.
