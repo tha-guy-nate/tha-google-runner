@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from tha_google_runner.docs import (
+    _DOCS_BASE,
     ThaDocs,
     _extract_text,
     _get_tab_body,
@@ -18,7 +20,7 @@ from tha_google_runner.errors import GoogleError
 # ---------------------------------------------------------------------------
 
 
-def _make_body(text: str) -> dict:
+def _make_body(text: str) -> dict[str, Any]:
     n = len(text)
     return {
         "content": [
@@ -28,11 +30,11 @@ def _make_body(text: str) -> dict:
     }
 
 
-def _make_doc(text: str = "hello") -> dict:
+def _make_doc(text: str = "hello") -> dict[str, Any]:
     return {"body": _make_body(text)}
 
 
-def _make_tabbed_doc(tab_a: str = "tab a text", tab_b: str = "tab b text") -> dict:
+def _make_tabbed_doc(tab_a: str = "tab a text", tab_b: str = "tab b text") -> dict[str, Any]:
     return {
         "tabs": [
             {
@@ -47,39 +49,42 @@ def _make_tabbed_doc(tab_a: str = "tab a text", tab_b: str = "tab b text") -> di
     }
 
 
-def make_docs(doc_response: dict | None = None) -> tuple[ThaDocs, MagicMock]:
-    svc = MagicMock()
+def make_docs(doc_response: dict[str, Any] | None = None) -> tuple[ThaDocs, MagicMock]:
+    rest = MagicMock()
     if doc_response is not None:
-        svc.documents().get().execute.return_value = doc_response
-    svc.documents().batchUpdate().execute.return_value = {
-        "replies": [{"replaceAllText": {"occurrencesChanged": 1}}]
-    }
+        rest.get.return_value = doc_response
+    rest.post.return_value = {"replies": [{"replaceAllText": {"occurrencesChanged": 1}}]}
     docs = ThaDocs()
-    docs._service = svc
-    return docs, svc
+    docs._rest = rest
+    return docs, rest
+
+
+def _batch_update_requests(rest: MagicMock) -> list[dict[str, Any]]:
+    _, kwargs = rest.post.call_args
+    return kwargs["json"]["requests"]  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
-# _get_service
+# _get_rest
 # ---------------------------------------------------------------------------
 
 
-def test_get_service_builds_and_caches_lazily() -> None:
+def test_get_rest_builds_and_caches_lazily() -> None:
     docs = ThaDocs(credentials_file="secret.json", token_file="token.json")
-    mock_service = MagicMock()
-    mock_service.documents().get().execute.return_value = _make_doc()
+    mock_rest = MagicMock()
+    mock_rest.get.return_value = _make_doc()
 
     with (
         patch("tha_google_runner.docs.build_credentials") as mock_build_creds,
-        patch("googleapiclient.discovery.build") as mock_build,
+        patch("tha_google_runner.docs.RestClient") as mock_rest_cls,
     ):
         mock_build_creds.return_value = "creds"
-        mock_build.return_value = mock_service
+        mock_rest_cls.return_value = mock_rest
         docs.read(doc_id="d1")
         docs.read(doc_id="d1")
 
-    mock_build_creds.assert_called_once_with("secret.json", "token.json", docs._SCOPES)
-    mock_build.assert_called_once_with("docs", "v1", credentials="creds")
+    mock_build_creds.assert_called_once_with("secret.json", "token.json", docs._scopes)
+    mock_rest_cls.assert_called_once_with("creds", backend="requests")
 
 
 # ---------------------------------------------------------------------------
@@ -88,15 +93,15 @@ def test_get_service_builds_and_caches_lazily() -> None:
 
 
 def test_resolve_id_accepts_raw_id() -> None:
-    docs, svc = make_docs(_make_doc())
+    docs, rest = make_docs(_make_doc())
     docs.read(doc_id="abc123")
-    svc.documents().get.assert_called_with(documentId="abc123", includeTabsContent=True)
+    rest.get.assert_called_with(f"{_DOCS_BASE}/abc123", params={"includeTabsContent": "true"})
 
 
 def test_resolve_id_accepts_url() -> None:
-    docs, svc = make_docs(_make_doc())
+    docs, rest = make_docs(_make_doc())
     docs.read(url="https://docs.google.com/document/d/abc123/edit")
-    svc.documents().get.assert_called_with(documentId="abc123", includeTabsContent=True)
+    rest.get.assert_called_with(f"{_DOCS_BASE}/abc123", params={"includeTabsContent": "true"})
 
 
 def test_resolve_id_raises_on_bad_url() -> None:
@@ -147,17 +152,17 @@ def test_read_tab_by_title() -> None:
 
 
 def test_append_inserts_at_end_no_tab() -> None:
-    docs, svc = make_docs(_make_doc("hello"))
+    docs, rest = make_docs(_make_doc("hello"))
     docs.append(" world", doc_id="d1")
-    req = svc.documents().batchUpdate.call_args[1]["body"]["requests"][0]
+    req = _batch_update_requests(rest)[0]
     assert req["insertText"]["text"] == " world"
     assert "tabId" not in req["insertText"]["location"]
 
 
 def test_append_includes_tab_id_in_location() -> None:
-    docs, svc = make_docs(_make_tabbed_doc("content here", "other"))
+    docs, rest = make_docs(_make_tabbed_doc("content here", "other"))
     docs.append(" appended", doc_id="d1", tab_id="t.aaa")
-    req = svc.documents().batchUpdate.call_args[1]["body"]["requests"][0]
+    req = _batch_update_requests(rest)[0]
     assert req["insertText"]["location"]["tabId"] == "t.aaa"
     assert req["insertText"]["text"] == " appended"
 
@@ -168,9 +173,9 @@ def test_append_includes_tab_id_in_location() -> None:
 
 
 def test_insert_after_inserts_text() -> None:
-    docs, svc = make_docs(_make_doc("hello world"))
+    docs, rest = make_docs(_make_doc("hello world"))
     docs.insert_after(" there", after="hello", doc_id="d1")
-    req = svc.documents().batchUpdate.call_args[1]["body"]["requests"][0]
+    req = _batch_update_requests(rest)[0]
     assert req["insertText"]["text"] == " there"
 
 
@@ -181,17 +186,17 @@ def test_insert_after_raises_when_not_found() -> None:
 
 
 def test_insert_after_at_very_end_of_text() -> None:
-    docs, svc = make_docs(_make_doc("hello world"))
+    docs, rest = make_docs(_make_doc("hello world"))
     docs.insert_after("!", after="world", doc_id="d1")
-    req = svc.documents().batchUpdate.call_args[1]["body"]["requests"][0]
+    req = _batch_update_requests(rest)[0]
     assert req["insertText"]["text"] == "!"
     assert req["insertText"]["location"]["index"] == 12
 
 
 def test_insert_after_includes_tab_id_in_location() -> None:
-    docs, svc = make_docs(_make_tabbed_doc("hello world", "other"))
+    docs, rest = make_docs(_make_tabbed_doc("hello world", "other"))
     docs.insert_after(" there", after="hello", doc_id="d1", tab_id="t.aaa")
-    req = svc.documents().batchUpdate.call_args[1]["body"]["requests"][0]
+    req = _batch_update_requests(rest)[0]
     assert req["insertText"]["location"]["tabId"] == "t.aaa"
 
 
@@ -207,10 +212,25 @@ def test_replace_returns_occurrence_count() -> None:
 
 
 def test_replace_passes_match_case_false() -> None:
-    docs, svc = make_docs(_make_doc())
+    docs, rest = make_docs(_make_doc())
     docs.replace(old_text="Hello", new_text="Hi", doc_id="d1", match_case=False)
-    req = svc.documents().batchUpdate.call_args[1]["body"]["requests"][0]
+    req = _batch_update_requests(rest)[0]
     assert req["replaceAllText"]["containsText"]["matchCase"] is False
+
+
+# ---------------------------------------------------------------------------
+# create
+# ---------------------------------------------------------------------------
+
+
+def test_create_returns_document_id() -> None:
+    docs, rest = make_docs()
+    rest.post.return_value = {"documentId": "new-doc-id", "title": "My Doc"}
+
+    doc_id = docs.create("My Doc")
+
+    assert doc_id == "new-doc-id"
+    rest.post.assert_called_once_with(_DOCS_BASE, json={"title": "My Doc"})
 
 
 # ---------------------------------------------------------------------------

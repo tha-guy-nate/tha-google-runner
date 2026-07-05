@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
+from tha_google_runner._rest import RestClient
 from tha_google_runner.auth import SCOPE_PRESENTATIONS_READONLY, build_credentials
 from tha_google_runner.errors import GoogleError
 
 _ID_RE = re.compile(r"/d/([a-zA-Z0-9_-]+)|[?&]id=([a-zA-Z0-9_-]+)")
+_SLIDES_BASE = "https://slides.googleapis.com/v1/presentations"
 
 _TITLE_TYPES = {"TITLE", "CENTERED_TITLE"}
 _BODY_TYPES = {"BODY", "SUBTITLE"}
@@ -31,19 +33,19 @@ class ThaSlides:
         credentials_file: str | None = None,
         token_file: str | None = None,
         scopes: list[str] | None = None,
+        backend: Literal["requests", "httpx"] = "requests",
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
         self._scopes = scopes if scopes is not None else self._SCOPES
-        self._service: Any = None
+        self._backend = backend
+        self._rest: RestClient | None = None
 
-    def _get_service(self) -> Any:
-        if self._service is None:
-            from googleapiclient.discovery import build
-
+    def _get_rest(self) -> RestClient:
+        if self._rest is None:
             creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
-            self._service = build("slides", "v1", credentials=creds)
-        return self._service
+            self._rest = RestClient(creds, backend=self._backend)
+        return self._rest
 
     def _resolve_id(self, presentation_id: str | None, url: str | None) -> str:
         if url is not None:
@@ -65,7 +67,7 @@ class ThaSlides:
         url: str | None = None,
     ) -> list[dict[str, Any]]:
         pid = self._resolve_id(presentation_id, url)
-        presentation = self._get_service().presentations().get(presentationId=pid).execute()
+        presentation = self._get_rest().get(f"{_SLIDES_BASE}/{pid}")
 
         results: list[dict[str, Any]] = []
         for index, slide in enumerate(presentation.get("slides", [])):
@@ -107,4 +109,4 @@ class ThaSlides:
         url: str | None = None,
     ) -> dict[str, Any]:
         pid = self._resolve_id(presentation_id, url)
-        return self._get_service().presentations().get(presentationId=pid).execute()  # type: ignore[no-any-return]
+        return self._get_rest().get(f"{_SLIDES_BASE}/{pid}")  # type: ignore[no-any-return]

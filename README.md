@@ -15,6 +15,8 @@ A Tabular Helper API library that wraps Google Sheets, Docs, Drive, Slides, and 
 pip install tha-google-runner
 ```
 
+Calls the Google REST APIs directly rather than depending on `google-api-python-client` — dependencies are just `google-auth`, `google-auth-oauthlib`, and `tha-req-runner` (see [Alternatives](#alternatives) for the full story).
+
 ## Authentication setup
 
 `tha-google-runner` uses your **personal Google account** — not a service account. There are two ways to authenticate. Option 1 is recommended for most users since it works with private files and doesn't require any additional tooling.
@@ -150,6 +152,9 @@ docs.insert_after("Appendix", after="See also:", doc_id="your-document-id")
 
 # Replace all occurrences of a string (applies across all tabs)
 count = docs.replace(old_text="foo", new_text="bar", doc_id="your-document-id")
+
+# Create a new document and get its ID
+doc_id = docs.create("My New Doc")
 ```
 
 > **Finding your document ID:** It's the long string in the URL between `/d/` and `/edit`.
@@ -290,12 +295,13 @@ Header detection for `list[list]` input:
 
 ## API
 
-### `ThaSheets(*, credentials_file=None, token_file=None)`
+### `ThaSheets(*, credentials_file=None, token_file=None, backend="requests")`
 
 ```python
 ThaSheets(
     credentials_file: str | None = None,  # path to client_secrets.json; None uses ADC
     token_file: str | None = None,         # override token cache path (OAuth2 only)
+    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
 )
 ```
 
@@ -447,12 +453,13 @@ sheets.clear(spreadsheet_id="spreadsheet-id", sheet_name="Archive")
 
 ## ThaDocs API
 
-### `ThaDocs(*, credentials_file=None, token_file=None)`
+### `ThaDocs(*, credentials_file=None, token_file=None, backend="requests")`
 
 ```python
 ThaDocs(
     credentials_file: str | None = None,  # path to client_secrets.json; None uses ADC
     token_file: str | None = None,         # override token cache path (OAuth2 only)
+    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
 )
 ```
 
@@ -506,14 +513,25 @@ count = docs.replace(old_text="Draft", new_text="Final", doc_id="document-id", m
 
 ---
 
+### `create(title) -> str`
+
+Create a new blank document. Returns the new document's ID.
+
+```python
+doc_id = docs.create("My New Doc")
+```
+
+---
+
 ## ThaDrive API
 
-### `ThaDrive(*, credentials_file=None, token_file=None)`
+### `ThaDrive(*, credentials_file=None, token_file=None, backend="requests")`
 
 ```python
 ThaDrive(
     credentials_file: str | None = None,
     token_file: str | None = None,
+    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
 )
 ```
 
@@ -579,12 +597,13 @@ with open("report.pdf", "wb") as f:
 
 ## ThaSlides API
 
-### `ThaSlides(*, credentials_file=None, token_file=None)`
+### `ThaSlides(*, credentials_file=None, token_file=None, backend="requests")`
 
 ```python
 ThaSlides(
     credentials_file: str | None = None,
     token_file: str | None = None,
+    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
 )
 ```
 
@@ -616,12 +635,13 @@ raw = slides.get(presentation_id="presentation-id")
 
 ## ThaGmail API
 
-### `ThaGmail(*, credentials_file=None, token_file=None)`
+### `ThaGmail(*, credentials_file=None, token_file=None, backend="requests")`
 
 ```python
 ThaGmail(
     credentials_file: str | None = None,
     token_file: str | None = None,
+    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
 )
 ```
 
@@ -669,6 +689,17 @@ print(msg["subject"], msg["from_"], msg["body"])
 ```
 
 Returns a dict with `id`, `thread_id`, `subject`, `from_`, `to`, `date`, and `body`.
+
+---
+
+## Alternatives
+
+- **[gspread](https://github.com/burnash/gspread)** — the standard, mature library for Google Sheets specifically. More Sheets-specific features (formatting, formulas, cell ranges) if that's the only API you need.
+- **[google-api-python-client](https://github.com/googleapis/google-api-python-client)** — Google's official client, generated from the API discovery docs. Full parameter coverage for every Google API, but a much heavier install and a dynamic, untyped call interface (`service.spreadsheets().values().get(...).execute()`).
+- **[PyDrive2](https://github.com/iterative/PyDrive2)** — a higher-level wrapper specifically for Google Drive uploads/downloads.
+- **[EZGmail](https://github.com/asweigart/ezgmail)** — a minimal wrapper focused just on sending/reading Gmail.
+
+`tha-google-runner` is intentionally narrow: one typed, consistent interface across Sheets/Docs/Drive/Slides/Gmail rather than full coverage of any single API. Since v0.2.0 it also calls the REST APIs directly instead of depending on `google-api-python-client` — the install is `google-auth` + `google-auth-oauthlib` + `tha-req-runner` (via `requests`, or optionally `httpx`), not the ~15MB `google-api-python-client` SDK and its transitive `protobuf`/`googleapis-common-protos` stack.
 
 ---
 

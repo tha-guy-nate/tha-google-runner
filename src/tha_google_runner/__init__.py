@@ -2,14 +2,15 @@
 
 from tha_google_runner.docs import ThaDocs
 from tha_google_runner.drive import ThaDrive
-from tha_google_runner.errors import GoogleError
+from tha_google_runner.errors import GoogleError, GoogleHttpError
 from tha_google_runner.gmail import ThaGmail
 from tha_google_runner.sheets import ThaSheets
 from tha_google_runner.slides import ThaSlides
 
-__version__ = "0.1.8"
+__version__ = "0.2.0"
 __all__ = [
     "GoogleError",
+    "GoogleHttpError",
     "ThaDocs",
     "ThaDrive",
     "ThaGmail",
