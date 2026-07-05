@@ -3,10 +3,13 @@ from __future__ import annotations
 import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
+from tha_google_runner._rest import RestClient
 from tha_google_runner.auth import SCOPE_GMAIL_READONLY, SCOPE_GMAIL_SEND, build_credentials
 from tha_google_runner.errors import GoogleError
+
+_GMAIL_BASE = "https://gmail.googleapis.com/v1/users/me"
 
 
 def _join_addresses(value: str | list[str]) -> str:
@@ -51,19 +54,19 @@ class ThaGmail:
         credentials_file: str | None = None,
         token_file: str | None = None,
         scopes: list[str] | None = None,
+        backend: Literal["requests", "httpx"] = "requests",
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
         self._scopes = scopes if scopes is not None else self._SCOPES
-        self._service: Any = None
+        self._backend = backend
+        self._rest: RestClient | None = None
 
-    def _get_service(self) -> Any:
-        if self._service is None:
-            from googleapiclient.discovery import build
-
+    def _get_rest(self) -> RestClient:
+        if self._rest is None:
             creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
-            self._service = build("gmail", "v1", credentials=creds)
-        return self._service
+            self._rest = RestClient(creds, backend=self._backend)
+        return self._rest
 
     def send(
         self,
@@ -89,7 +92,9 @@ class ThaGmail:
             msg["bcc"] = _join_addresses(bcc)
 
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-        return self._get_service().users().messages().send(userId="me", body={"raw": raw}).execute()  # type: ignore[no-any-return]
+        return self._get_rest().post(  # type: ignore[no-any-return]
+            f"{_GMAIL_BASE}/messages/send", json={"raw": raw}
+        )
 
     def list_messages(
         self,
@@ -97,21 +102,18 @@ class ThaGmail:
         query: str | None = None,
         max_results: int = 100,
     ) -> list[dict[str, Any]]:
-        svc = self._get_service()
+        rest = self._get_rest()
         results: list[dict[str, Any]] = []
         page_token: str | None = None
 
         while len(results) < max_results:
-            kwargs: dict[str, Any] = {
-                "userId": "me",
-                "maxResults": min(500, max_results - len(results)),
-            }
+            params: dict[str, Any] = {"maxResults": min(500, max_results - len(results))}
             if query:
-                kwargs["q"] = query
+                params["q"] = query
             if page_token:
-                kwargs["pageToken"] = page_token
+                params["pageToken"] = page_token
 
-            response = svc.users().messages().list(**kwargs).execute()
+            response = rest.get(f"{_GMAIL_BASE}/messages", params=params)
             results.extend(response.get("messages", []))
             page_token = response.get("nextPageToken")
             if not page_token:
@@ -120,12 +122,8 @@ class ThaGmail:
         return results[:max_results]
 
     def read(self, *, message_id: str) -> dict[str, Any]:
-        message = (
-            self._get_service()
-            .users()
-            .messages()
-            .get(userId="me", id=message_id, format="full")
-            .execute()
+        message = self._get_rest().get(
+            f"{_GMAIL_BASE}/messages/{message_id}", params={"format": "full"}
         )
         if not message:
             raise GoogleError(f"Message not found: {message_id}")

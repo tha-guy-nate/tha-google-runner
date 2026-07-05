@@ -1,11 +1,12 @@
 import base64
 from email import message_from_bytes
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from tha_google_runner.errors import GoogleError
-from tha_google_runner.gmail import ThaGmail
+from tha_google_runner.gmail import _GMAIL_BASE, ThaGmail
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -13,10 +14,10 @@ from tha_google_runner.gmail import ThaGmail
 
 
 def make_gmail() -> tuple[ThaGmail, MagicMock]:
-    svc = MagicMock()
+    rest = MagicMock()
     g = ThaGmail()
-    g._service = svc
-    return g, svc
+    g._rest = rest
+    return g, rest
 
 
 def _b64(text: str) -> str:
@@ -32,7 +33,7 @@ def _message(
     mime: str = "text/plain",
     message_id: str = "msg1",
     thread_id: str = "thread1",
-) -> dict:
+) -> dict[str, Any]:
     return {
         "id": message_id,
         "threadId": thread_id,
@@ -55,54 +56,54 @@ def _message(
 
 
 def test_send_calls_api() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().send().execute.return_value = {"id": "sent1"}
+    g, rest = make_gmail()
+    rest.post.return_value = {"id": "sent1"}
 
     result = g.send(to="a@example.com", subject="Hi", body="Hello")
 
     assert result == {"id": "sent1"}
-    call_kwargs = svc.users().messages().send.call_args[1]
-    assert call_kwargs["userId"] == "me"
-    raw = base64.urlsafe_b64decode(call_kwargs["body"]["raw"] + "==")
+    args, kwargs = rest.post.call_args
+    assert args[0] == f"{_GMAIL_BASE}/messages/send"
+    raw = base64.urlsafe_b64decode(kwargs["json"]["raw"] + "==")
     parsed = message_from_bytes(raw)
     assert parsed["to"] == "a@example.com"
     assert parsed["subject"] == "Hi"
 
 
 def test_send_list_of_recipients() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().send().execute.return_value = {"id": "sent1"}
+    g, rest = make_gmail()
+    rest.post.return_value = {"id": "sent1"}
 
     g.send(to=["a@example.com", "b@example.com"], subject="Hi", body="Hello")
 
-    call_kwargs = svc.users().messages().send.call_args[1]
-    raw = base64.urlsafe_b64decode(call_kwargs["body"]["raw"] + "==")
+    _, kwargs = rest.post.call_args
+    raw = base64.urlsafe_b64decode(kwargs["json"]["raw"] + "==")
     parsed = message_from_bytes(raw)
     assert "a@example.com" in parsed["to"]
     assert "b@example.com" in parsed["to"]
 
 
 def test_send_with_cc_and_bcc() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().send().execute.return_value = {"id": "s1"}
+    g, rest = make_gmail()
+    rest.post.return_value = {"id": "s1"}
 
     g.send(to="a@example.com", subject="Hi", body="Hello", cc="c@example.com", bcc="b@example.com")
 
-    call_kwargs = svc.users().messages().send.call_args[1]
-    raw = base64.urlsafe_b64decode(call_kwargs["body"]["raw"] + "==")
+    _, kwargs = rest.post.call_args
+    raw = base64.urlsafe_b64decode(kwargs["json"]["raw"] + "==")
     parsed = message_from_bytes(raw)
     assert parsed["cc"] == "c@example.com"
     assert parsed["bcc"] == "b@example.com"
 
 
 def test_send_html_uses_multipart() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().send().execute.return_value = {"id": "s1"}
+    g, rest = make_gmail()
+    rest.post.return_value = {"id": "s1"}
 
     g.send(to="a@example.com", subject="Hi", body="<b>Hello</b>", html=True)
 
-    call_kwargs = svc.users().messages().send.call_args[1]
-    raw = base64.urlsafe_b64decode(call_kwargs["body"]["raw"] + "==")
+    _, kwargs = rest.post.call_args
+    raw = base64.urlsafe_b64decode(kwargs["json"]["raw"] + "==")
     parsed = message_from_bytes(raw)
     assert parsed.get_content_type() == "multipart/alternative"
 
@@ -113,27 +114,27 @@ def test_send_html_uses_multipart() -> None:
 
 
 def test_list_messages_returns_messages() -> None:
-    g, svc = make_gmail()
+    g, rest = make_gmail()
     msgs = [{"id": "1", "threadId": "t1"}, {"id": "2", "threadId": "t2"}]
-    svc.users().messages().list().execute.return_value = {"messages": msgs, "nextPageToken": None}
+    rest.get.return_value = {"messages": msgs, "nextPageToken": None}
 
     result = g.list_messages()
     assert result == msgs
 
 
 def test_list_messages_passes_query() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().list().execute.return_value = {"messages": [], "nextPageToken": None}
+    g, rest = make_gmail()
+    rest.get.return_value = {"messages": [], "nextPageToken": None}
 
     g.list_messages(query="from:boss@example.com")
 
-    call_kwargs = svc.users().messages().list.call_args[1]
-    assert call_kwargs["q"] == "from:boss@example.com"
+    _, kwargs = rest.get.call_args
+    assert kwargs["params"]["q"] == "from:boss@example.com"
 
 
 def test_list_messages_paginates() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().list().execute.side_effect = [
+    g, rest = make_gmail()
+    rest.get.side_effect = [
         {"messages": [{"id": "1"}], "nextPageToken": "tok"},
         {"messages": [{"id": "2"}], "nextPageToken": None},
     ]
@@ -143,9 +144,9 @@ def test_list_messages_paginates() -> None:
 
 
 def test_list_messages_respects_max_results() -> None:
-    g, svc = make_gmail()
+    g, rest = make_gmail()
     msgs = [{"id": str(i)} for i in range(10)]
-    svc.users().messages().list().execute.return_value = {"messages": msgs, "nextPageToken": None}
+    rest.get.return_value = {"messages": msgs, "nextPageToken": None}
 
     result = g.list_messages(max_results=3)
     assert len(result) == 3
@@ -157,8 +158,8 @@ def test_list_messages_respects_max_results() -> None:
 
 
 def test_read_returns_parsed_message() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().get().execute.return_value = _message(
+    g, rest = make_gmail()
+    rest.get.return_value = _message(
         subject="Test Subject",
         from_="sender@example.com",
         to="me@example.com",
@@ -176,7 +177,7 @@ def test_read_returns_parsed_message() -> None:
 
 
 def test_read_multipart_prefers_plain_text() -> None:
-    g, svc = make_gmail()
+    g, rest = make_gmail()
     message = {
         "id": "m1",
         "threadId": "t1",
@@ -189,14 +190,14 @@ def test_read_multipart_prefers_plain_text() -> None:
             ],
         },
     }
-    svc.users().messages().get().execute.return_value = message
+    rest.get.return_value = message
 
     result = g.read(message_id="m1")
     assert result["body"] == "plain text"
 
 
 def test_read_multipart_falls_back_to_first_nonempty_part() -> None:
-    g, svc = make_gmail()
+    g, rest = make_gmail()
     message = {
         "id": "m1",
         "threadId": "t1",
@@ -209,54 +210,42 @@ def test_read_multipart_falls_back_to_first_nonempty_part() -> None:
             ],
         },
     }
-    svc.users().messages().get().execute.return_value = message
+    rest.get.return_value = message
 
     result = g.read(message_id="m1")
     assert result["body"] == "<b>html only</b>"
 
 
 def test_read_raises_when_message_not_found() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().get().execute.return_value = {}
+    g, rest = make_gmail()
+    rest.get.return_value = {}
 
     with pytest.raises(GoogleError, match="Message not found"):
         g.read(message_id="missing")
 
 
 def test_read_calls_api_with_full_format() -> None:
-    g, svc = make_gmail()
-    svc.users().messages().get().execute.return_value = _message()
+    g, rest = make_gmail()
+    rest.get.return_value = _message()
 
     g.read(message_id="abc")
 
-    svc.users().messages().get.assert_called_with(userId="me", id="abc", format="full")
+    rest.get.assert_called_with(f"{_GMAIL_BASE}/messages/abc", params={"format": "full"})
 
 
-def test_get_service_builds_and_caches_lazily() -> None:
+def test_get_rest_builds_and_caches_lazily() -> None:
     g = ThaGmail(credentials_file="secret.json", token_file="token.json")
-    mock_service = MagicMock()
-    mock_service.users().messages().send().execute.return_value = {"id": "s1"}
+    mock_rest = MagicMock()
+    mock_rest.post.return_value = {"id": "s1"}
 
     with (
         patch("tha_google_runner.gmail.build_credentials") as mock_build_creds,
-        patch("googleapiclient.discovery.build") as mock_build,
+        patch("tha_google_runner.gmail.RestClient") as mock_rest_cls,
     ):
         mock_build_creds.return_value = "creds"
-        mock_build.return_value = mock_service
+        mock_rest_cls.return_value = mock_rest
         g.send(to="a@b.com", subject="x", body="y")
         g.send(to="a@b.com", subject="x", body="y")
 
-    mock_build_creds.assert_called_once_with("secret.json", "token.json", g._SCOPES)
-    mock_build.assert_called_once_with("gmail", "v1", credentials="creds")
-
-
-def test_service_is_built_once() -> None:
-    g, _ = make_gmail()
-    svc = MagicMock()
-    svc.users().messages().send().execute.return_value = {"id": "s1"}
-    g._service = svc
-
-    g.send(to="a@b.com", subject="x", body="y")
-    g.send(to="a@b.com", subject="x", body="y")
-
-    assert g._service is svc
+    mock_build_creds.assert_called_once_with("secret.json", "token.json", g._scopes)
+    mock_rest_cls.assert_called_once_with("creds", backend="requests")
