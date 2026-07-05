@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import re
 from typing import Any, ClassVar, Literal
+from urllib.parse import quote
 
-from googleapiclient.errors import HttpError
-
+from tha_google_runner._rest import RestClient
 from tha_google_runner.auth import SCOPE_DRIVE, SCOPE_SPREADSHEETS, build_credentials
-from tha_google_runner.errors import GoogleError, with_retry
+from tha_google_runner.errors import GoogleError, GoogleHttpError
 
 OnConflict = Literal["update_all", "update_first", "update_last", "raise", "skip"]
 
 _URL_RE = re.compile(r"/spreadsheets/d/([a-zA-Z0-9_-]+)")
 _INPUT = "USER_ENTERED"
+_SHEETS_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
+_DRIVE_BASE = "https://www.googleapis.com/drive/v3"
 
 
 def _a1(row: int, col: int) -> str:
@@ -37,29 +39,20 @@ class ThaSheets:
         credentials_file: str | None = None,
         token_file: str | None = None,
         scopes: list[str] | None = None,
+        backend: Literal["requests", "httpx"] = "requests",
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file
         self._scopes = scopes if scopes is not None else self._SCOPES
-        self._service: Any = None
-        self._drive_service: Any = None
+        self._backend = backend
+        self._rest: RestClient | None = None
         self.rows: list[dict[str, Any]] = []
 
-    def _get_service(self) -> Any:
-        if self._service is None:
-            from googleapiclient.discovery import build
-
+    def _get_rest(self) -> RestClient:
+        if self._rest is None:
             creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
-            self._service = build("sheets", "v4", credentials=creds)
-        return self._service
-
-    def _get_drive_service(self) -> Any:
-        if self._drive_service is None:
-            from googleapiclient.discovery import build
-
-            creds = build_credentials(self._credentials_file, self._token_file, self._scopes)
-            self._drive_service = build("drive", "v3", credentials=creds)
-        return self._drive_service
+            self._rest = RestClient(creds, backend=self._backend)
+        return self._rest
 
     def _resolve_id(self, spreadsheet_id: str | None, url: str | None) -> str:
         if url is not None:
@@ -73,16 +66,9 @@ class ThaSheets:
 
     def _meta(self, sid: str, fields: str = "*") -> dict[str, Any]:
         try:
-            return with_retry(
-                lambda: (
-                    self._get_service()
-                    .spreadsheets()
-                    .get(spreadsheetId=sid, fields=fields)
-                    .execute()
-                )
-            )
-        except HttpError as exc:
-            if exc.resp.status == 404:
+            return self._get_rest().get(f"{_SHEETS_BASE}/{sid}", params={"fields": fields})  # type: ignore[no-any-return]
+        except GoogleHttpError as exc:
+            if exc.status_code == 404:
                 raise GoogleError(f"Spreadsheet not found: {sid}") from None
             raise
 
@@ -99,68 +85,33 @@ class ThaSheets:
         self, sid: str, range_: str, *, sheet_name: str | None = None
     ) -> list[list[Any]]:
         try:
-            result = with_retry(
-                lambda: (
-                    self._get_service()
-                    .spreadsheets()
-                    .values()
-                    .get(
-                        spreadsheetId=sid,
-                        range=range_,
-                        valueRenderOption="UNFORMATTED_VALUE",
-                    )
-                    .execute()
-                )
+            result = self._get_rest().get(
+                f"{_SHEETS_BASE}/{sid}/values/{quote(range_, safe='')}",
+                params={"valueRenderOption": "UNFORMATTED_VALUE"},
             )
             return result.get("values", [])  # type: ignore[no-any-return]
-        except HttpError as exc:
-            if exc.resp.status in (400, 404) and sheet_name is not None:
+        except GoogleHttpError as exc:
+            if exc.status_code in (400, 404) and sheet_name is not None:
                 raise GoogleError(f"Sheet '{sheet_name}' not found in {sid}") from None
             raise
 
     def _set_values(self, sid: str, range_: str, values: list[list[Any]]) -> None:
-        with_retry(
-            lambda: (
-                self._get_service()
-                .spreadsheets()
-                .values()
-                .update(
-                    spreadsheetId=sid,
-                    range=range_,
-                    valueInputOption=_INPUT,
-                    body={"values": values},
-                )
-                .execute()
-            )
+        self._get_rest().put(
+            f"{_SHEETS_BASE}/{sid}/values/{quote(range_, safe='')}",
+            params={"valueInputOption": _INPUT},
+            json={"values": values},
         )
 
     def _append_values(self, sid: str, range_: str, values: list[list[Any]]) -> None:
-        with_retry(
-            lambda: (
-                self._get_service()
-                .spreadsheets()
-                .values()
-                .append(
-                    spreadsheetId=sid,
-                    range=range_,
-                    valueInputOption=_INPUT,
-                    insertDataOption="INSERT_ROWS",
-                    body={"values": values},
-                )
-                .execute()
-            )
+        self._get_rest().post(
+            f"{_SHEETS_BASE}/{sid}/values/{quote(range_, safe='')}:append",
+            params={"valueInputOption": _INPUT, "insertDataOption": "INSERT_ROWS"},
+            json={"values": values},
         )
 
     def _clear_values(self, sid: str, range_: str) -> None:
-        with_retry(
-            lambda: (
-                self._get_service()
-                .spreadsheets()
-                .values()
-                .clear(spreadsheetId=sid, range=range_)
-                .execute()
-            )
-        )
+        url = f"{_SHEETS_BASE}/{sid}/values/{quote(range_, safe='')}:clear"
+        self._get_rest().post(url, json={})
 
     def _normalize_rows(
         self,
@@ -268,7 +219,7 @@ class ThaSheets:
             "properties": {"title": title},
             "sheets": [{"properties": {"title": sheet_name}}],
         }
-        result = with_retry(lambda: self._get_service().spreadsheets().create(body=body).execute())
+        result = self._get_rest().post(_SHEETS_BASE, json=body)
         sid: str = result["spreadsheetId"]
         if rows:
             headers, dict_rows = self._normalize_rows(rows, [])
@@ -284,7 +235,7 @@ class ThaSheets:
         url: str | None = None,
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        with_retry(lambda: self._get_drive_service().files().delete(fileId=sid).execute())
+        self._get_rest().delete(f"{_DRIVE_BASE}/files/{sid}")
         self.rows = []
 
     def list_sheets(
@@ -306,27 +257,20 @@ class ThaSheets:
         rows: list[dict[str, Any]] | list[list[Any]] | None = None,
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        with_retry(
-            lambda: (
-                self._get_service()
-                .spreadsheets()
-                .batchUpdate(
-                    spreadsheetId=sid,
-                    body={
-                        "requests": [
-                            {
-                                "addSheet": {
-                                    "properties": {
-                                        "title": sheet_name,
-                                        "gridProperties": {"rowCount": 1000, "columnCount": 26},
-                                    }
-                                }
+        self._get_rest().post(
+            f"{_SHEETS_BASE}/{sid}:batchUpdate",
+            json={
+                "requests": [
+                    {
+                        "addSheet": {
+                            "properties": {
+                                "title": sheet_name,
+                                "gridProperties": {"rowCount": 1000, "columnCount": 26},
                             }
-                        ]
-                    },
-                )
-                .execute()
-            )
+                        }
+                    }
+                ]
+            },
         )
         if rows:
             headers, dict_rows = self._normalize_rows(rows, [])
@@ -350,16 +294,9 @@ class ThaSheets:
                 break
         if sheet_id is None:
             raise GoogleError(f"Sheet '{sheet_name}' not found in {sid}")
-        with_retry(
-            lambda: (
-                self._get_service()
-                .spreadsheets()
-                .batchUpdate(
-                    spreadsheetId=sid,
-                    body={"requests": [{"deleteSheet": {"sheetId": sheet_id}}]},
-                )
-                .execute()
-            )
+        self._get_rest().post(
+            f"{_SHEETS_BASE}/{sid}:batchUpdate",
+            json={"requests": [{"deleteSheet": {"sheetId": sheet_id}}]},
         )
 
     def share(
@@ -371,17 +308,10 @@ class ThaSheets:
         role: str = "reader",
     ) -> None:
         sid = self._resolve_id(spreadsheet_id, url)
-        with_retry(
-            lambda: (
-                self._get_drive_service()
-                .permissions()
-                .create(
-                    fileId=sid,
-                    body={"type": "user", "role": role, "emailAddress": email},
-                    sendNotificationEmail=False,
-                )
-                .execute()
-            )
+        self._get_rest().post(
+            f"{_DRIVE_BASE}/files/{sid}/permissions",
+            params={"sendNotificationEmail": "false"},
+            json={"type": "user", "role": role, "emailAddress": email},
         )
 
     def upsert_rows(
@@ -470,17 +400,9 @@ class ThaSheets:
             upserted += 1
 
         if cell_updates:
-            with_retry(
-                lambda: (
-                    self._get_service()
-                    .spreadsheets()
-                    .values()
-                    .batchUpdate(
-                        spreadsheetId=sid,
-                        body={"valueInputOption": _INPUT, "data": cell_updates},
-                    )
-                    .execute()
-                )
+            self._get_rest().post(
+                f"{_SHEETS_BASE}/{sid}/values:batchUpdate",
+                json={"valueInputOption": _INPUT, "data": cell_updates},
             )
         if rows_to_append:
             self._append_values(sid, _rng(name), rows_to_append)

@@ -30,9 +30,11 @@ dependencies = [
     "google-auth-oauthlib>=1.0",
     "google-api-python-client>=2.0",
     "platformdirs>=4.0",
+    "tha-req-runner>=0.2.5",
 ]
 
 [project.optional-dependencies]
+httpx = ["tha-req-runner[httpx]"]
 dev = [
     "pytest>=9.1.0",
     "ruff>=0.15.17",
