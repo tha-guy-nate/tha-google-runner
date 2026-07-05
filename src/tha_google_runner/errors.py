@@ -43,32 +43,3 @@ def retry_rate_limited(fn: Callable[[], T], *, max_attempts: int = 5, base_delay
                 raise
             time.sleep(base_delay * (2**attempt) + random.uniform(0, 1))
     raise AssertionError("unreachable")  # pragma: no cover
-
-
-def _is_rate_limited(exc: BaseException) -> bool:
-    try:
-        import gspread.exceptions
-
-        if isinstance(exc, gspread.exceptions.APIError) and exc.response.status_code == 429:
-            return True
-    except Exception:  # pragma: no cover — gspread is a required dep, always importable
-        pass
-    try:
-        from googleapiclient.errors import HttpError
-
-        if isinstance(exc, HttpError) and exc.resp.status == 429:
-            return True
-    except Exception:  # pragma: no cover — google-api-python-client is a required dep
-        pass
-    return False
-
-
-def with_retry(fn: Callable[[], T], *, max_attempts: int = 5, base_delay: float = 1.0) -> T:
-    for attempt in range(max_attempts):
-        try:
-            return fn()
-        except Exception as exc:
-            if not _is_rate_limited(exc) or attempt == max_attempts - 1:
-                raise
-            time.sleep(base_delay * (2**attempt) + random.uniform(0, 1))
-    raise AssertionError("unreachable")  # pragma: no cover

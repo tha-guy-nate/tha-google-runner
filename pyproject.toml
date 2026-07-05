@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tha-google-runner"
-version = "0.1.8"
+version = "0.2.0"
 description = "A Tabular Helper API library that wraps Google Sheets, Docs, Drive, Slides, and Gmail with a typed, consistent interface."
 readme = "README.md"
 license = { text = "MIT" }
@@ -23,12 +23,10 @@ classifiers = [
     "Topic :: Utilities",
     "Typing :: Typed",
 ]
-keywords = ["google", "sheets", "docs", "gspread", "tabular", "helper"]
+keywords = ["google", "sheets", "docs", "tabular", "helper"]
 dependencies = [
-    "gspread>=6.0",
     "google-auth>=2.0",
     "google-auth-oauthlib>=1.0",
-    "google-api-python-client>=2.0",
     "platformdirs>=4.0",
     "tha-req-runner>=0.2.5",
 ]
