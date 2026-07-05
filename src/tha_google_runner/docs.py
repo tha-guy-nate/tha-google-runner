@@ -132,6 +132,10 @@ class ThaDocs:
         replies = result.get("replies", [{}])
         return replies[0].get("replaceAllText", {}).get("occurrencesChanged", 0) if replies else 0
 
+    def create(self, title: str) -> str:
+        result = self._get_rest().post(_DOCS_BASE, json={"title": title})
+        return result["documentId"]  # type: ignore[no-any-return]
+
 
 def _get_tab_body(doc: dict[str, Any], tab_id: str | None) -> dict[str, Any]:
     """Return the body for the specified tab, defaulting to the first tab when tab_id is None."""

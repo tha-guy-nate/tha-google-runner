@@ -219,6 +219,21 @@ def test_replace_passes_match_case_false() -> None:
 
 
 # ---------------------------------------------------------------------------
+# create
+# ---------------------------------------------------------------------------
+
+
+def test_create_returns_document_id() -> None:
+    docs, rest = make_docs()
+    rest.post.return_value = {"documentId": "new-doc-id", "title": "My Doc"}
+
+    doc_id = docs.create("My Doc")
+
+    assert doc_id == "new-doc-id"
+    rest.post.assert_called_once_with(_DOCS_BASE, json={"title": "My Doc"})
+
+
+# ---------------------------------------------------------------------------
 # _get_tab_body
 # ---------------------------------------------------------------------------
 

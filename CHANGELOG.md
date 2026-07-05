@@ -11,10 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Replaced `google-api-python-client` (and the unused `gspread` dependency) with direct REST calls over `tha-req-runner` across all five classes (`ThaSheets`, `ThaDocs`, `ThaDrive`, `ThaSlides`, `ThaGmail`). Drops `google-api-python-client`, `gspread`, `httplib2`, `google-auth-httplib2`, `uritemplate`, `google-api-core`, `googleapis-common-protos`, `protobuf`, and `proto-plus` — the heaviest of which (`google-api-python-client`) was a 15.6MB wheel on its own. `google-auth`/`google-auth-oauthlib` are kept for credential/token handling.
 - `ThaSheets`/`ThaDrive`'s export/download methods drop the SDK's chunked `MediaIoBaseDownload` loop for a single direct request — the chunking was only for progress/resumability, not a functional requirement, since Google's REST endpoints return the full body in one response either way.
-- No public method signatures changed; this is an internal transport swap.
+- No existing public method signatures changed; this is an internal transport swap.
 ### Added
 - `backend="requests"|"httpx"` keyword-only parameter on all five classes, forwarded to the underlying `tha-req-runner` transport. New `[httpx]` extra (`pip install tha-google-runner[httpx]`) so picking `backend="httpx"` doesn't require a second manual install.
 - `GoogleHttpError` (raised for non-2xx REST responses, carrying `.status_code` and `.data`), now exported from the package alongside `GoogleError`.
+- `ThaDocs.create(title) -> str` — creates a new blank document and returns its ID, mirroring `ThaSheets.create()`.
+- README `## Alternatives` section (previously missing) covering gspread, google-api-python-client, PyDrive2, and EZGmail, and noting the lighter dependency footprint from this release.
 
 ## [0.1.8] - 2026-07-04
 ### Fixed
