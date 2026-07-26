@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-07-25
+### Fixed
+- Bumped `tha-req-runner` dependency floor from `>=0.2.5` to `>=0.2.7` — versions 0.2.5 and earlier are yanked on PyPI.
+- Corrected `__init__.py.__version__` drift (was stuck at 0.2.0 while `pyproject.toml` had already moved to 0.2.1).
+- Re-locked transitive `pyasn1` (via `google-auth` -> `pyasn1-modules`) from `0.6.3` to `0.6.4`, resolving three known CVEs (PYSEC-2026-3455/3456/3457) flagged by `pip-audit`.
+
 ## [0.2.1] - 2026-07-04
 ### Fixed
 - `pyproject.toml` `keywords` only covered `google`/`sheets`/`docs` even though the library also wraps Drive, Slides, and Gmail — added `drive`, `slides`, `gmail`. Also removed the now-stale `gspread` GitHub topic (dropped entirely in the 0.2.0 REST migration).
