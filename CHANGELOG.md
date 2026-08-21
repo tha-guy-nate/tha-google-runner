@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-08-21
+### Fixed
+- Re-locked transitive `cryptography` (pulled in via the `google-auth` runtime dependency) from `49.0.0` to `50.0.0`, resolving a known CVE (PYSEC-2026-3552) flagged by `pip-audit`.
+- Re-locked transitive `pip` (pulled in via `deptry` -> `pip-api`) from `26.1.2` to `26.2.1`, resolving a separate known CVE (PYSEC-2026-3721).
+
 ## [0.2.2] - 2026-07-25
 ### Fixed
 - Bumped `tha-req-runner` dependency floor from `>=0.2.5` to `>=0.2.7` — versions 0.2.5 and earlier are yanked on PyPI.
