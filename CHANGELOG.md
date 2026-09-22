@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-20
+### Changed
+- **Breaking**: `backend: Literal["requests", "httpx"]` is now `Literal["requests", "httpx2"]` across `ThaSheets`, `ThaDocs`, `ThaDrive`, `ThaSlides`, and `ThaGmail`, following `tha-req-runner` 0.3.0's swap from `httpx` to `httpx2` (Pydantic's maintained successor). The `httpx` extra is now `httpx2`; floor bumped to `tha-req-runner>=0.3.0`. No repo in the `tha-*` family ships this backend in production, so this lands as a straight rename.
+
 ## [0.2.3] - 2026-08-21
 ### Fixed
 - Re-locked transitive `cryptography` (pulled in via the `google-auth` runtime dependency) from `49.0.0` to `50.0.0`, resolving a known CVE (PYSEC-2026-3552) flagged by `pip-audit`.

@@ -23,7 +23,7 @@ class RestClient:
     """
 
     def __init__(
-        self, credentials: Any, *, backend: Literal["requests", "httpx"] = "requests"
+        self, credentials: Any, *, backend: Literal["requests", "httpx2"] = "requests"
     ) -> None:
         self._creds = credentials
         self._req = ThaReq(backend=backend)
