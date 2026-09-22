@@ -33,7 +33,7 @@ class ThaSlides:
         credentials_file: str | None = None,
         token_file: str | None = None,
         scopes: list[str] | None = None,
-        backend: Literal["requests", "httpx"] = "requests",
+        backend: Literal["requests", "httpx2"] = "requests",
     ) -> None:
         self._credentials_file = credentials_file
         self._token_file = token_file

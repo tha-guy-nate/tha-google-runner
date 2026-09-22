@@ -301,7 +301,7 @@ Header detection for `list[list]` input:
 ThaSheets(
     credentials_file: str | None = None,  # path to client_secrets.json; None uses ADC
     token_file: str | None = None,         # override token cache path (OAuth2 only)
-    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
+    backend: Literal["requests", "httpx2"] = "requests",  # HTTP backend; "httpx2" needs `pip install tha-google-runner[httpx2]`
 )
 ```
 
@@ -459,7 +459,7 @@ sheets.clear(spreadsheet_id="spreadsheet-id", sheet_name="Archive")
 ThaDocs(
     credentials_file: str | None = None,  # path to client_secrets.json; None uses ADC
     token_file: str | None = None,         # override token cache path (OAuth2 only)
-    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
+    backend: Literal["requests", "httpx2"] = "requests",  # HTTP backend; "httpx2" needs `pip install tha-google-runner[httpx2]`
 )
 ```
 
@@ -531,7 +531,7 @@ doc_id = docs.create("My New Doc")
 ThaDrive(
     credentials_file: str | None = None,
     token_file: str | None = None,
-    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
+    backend: Literal["requests", "httpx2"] = "requests",  # HTTP backend; "httpx2" needs `pip install tha-google-runner[httpx2]`
 )
 ```
 
@@ -603,7 +603,7 @@ with open("report.pdf", "wb") as f:
 ThaSlides(
     credentials_file: str | None = None,
     token_file: str | None = None,
-    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
+    backend: Literal["requests", "httpx2"] = "requests",  # HTTP backend; "httpx2" needs `pip install tha-google-runner[httpx2]`
 )
 ```
 
@@ -641,7 +641,7 @@ raw = slides.get(presentation_id="presentation-id")
 ThaGmail(
     credentials_file: str | None = None,
     token_file: str | None = None,
-    backend: Literal["requests", "httpx"] = "requests",  # HTTP backend; "httpx" needs `pip install tha-google-runner[httpx]`
+    backend: Literal["requests", "httpx2"] = "requests",  # HTTP backend; "httpx2" needs `pip install tha-google-runner[httpx2]`
 )
 ```
 
@@ -699,7 +699,7 @@ Returns a dict with `id`, `thread_id`, `subject`, `from_`, `to`, `date`, and `bo
 - **[PyDrive2](https://github.com/iterative/PyDrive2)** — a higher-level wrapper specifically for Google Drive uploads/downloads.
 - **[EZGmail](https://github.com/asweigart/ezgmail)** — a minimal wrapper focused just on sending/reading Gmail.
 
-`tha-google-runner` is intentionally narrow: one typed, consistent interface across Sheets/Docs/Drive/Slides/Gmail rather than full coverage of any single API. Since v0.2.0 it also calls the REST APIs directly instead of depending on `google-api-python-client` — the install is `google-auth` + `google-auth-oauthlib` + `tha-req-runner` (via `requests`, or optionally `httpx`), not the ~15MB `google-api-python-client` SDK and its transitive `protobuf`/`googleapis-common-protos` stack.
+`tha-google-runner` is intentionally narrow: one typed, consistent interface across Sheets/Docs/Drive/Slides/Gmail rather than full coverage of any single API. Since v0.2.0 it also calls the REST APIs directly instead of depending on `google-api-python-client` — the install is `google-auth` + `google-auth-oauthlib` + `tha-req-runner` (via `requests`, or optionally `httpx2`), not the ~15MB `google-api-python-client` SDK and its transitive `protobuf`/`googleapis-common-protos` stack.
 
 ---
 
