@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `__version__` is now read from the installed package metadata (`importlib.metadata`) instead of a hardcoded string, so `pyproject.toml` is the only place the version is bumped.
+
 ## [0.3.0] - 2026-09-20
 ### Changed
 - **Breaking**: `backend: Literal["requests", "httpx"]` is now `Literal["requests", "httpx2"]` across `ThaSheets`, `ThaDocs`, `ThaDrive`, `ThaSlides`, and `ThaGmail`, following `tha-req-runner` 0.3.0's swap from `httpx` to `httpx2` (Pydantic's maintained successor). The `httpx` extra is now `httpx2`; floor bumped to `tha-req-runner>=0.3.0`. No repo in the `tha-*` family ships this backend in production, so this lands as a straight rename.
