@@ -34,12 +34,12 @@ dependencies = [
 [project.optional-dependencies]
 httpx2 = ["tha-req-runner[httpx2]==0.3.0"]
 dev = [
-    "pytest==9.1.1",
-    "ruff==0.16.10",
-    "mypy==2.4.0",
-    "deptry==0.25.1",
-    "pip-audit==2.10.1",
-    "pytest-cov==7.1.0",
+    "pytest>=9.1.0",
+    "ruff>=0.15.17",
+    "mypy>=2.1.0",
+    "deptry>=0.25.1",
+    "pip-audit>=2.10.1",
+    "pytest-cov>=7.1.0",
 ]
 
 [project.scripts]
